@@ -2,6 +2,7 @@
 
 """
 from enum import Enum
+from typing import Callable
 
 LEMMA_SCRIPT_FUNCTIONS = dict()
 """Dictionary of all Lemma Script functions, populated by calling ``add_to_lemma_script``.
@@ -150,18 +151,27 @@ class LemmaScriptNode:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
         entry = LEMMA_SCRIPT_FUNCTIONS[function_name]
-        self.function = entry(0)
-        self.in_pins = tuple([p.clone_to_new_node(self) for p in entry(1)])
-        # for in_pin in self.in_pins:
-        #     in_pin.out = False
-        self.out_pins = tuple([p.clone_to_new_node(self) for p in entry(2)])
-        for out_pin in self.out_pins:
-            out_pin.out = True
-        self.node_type = tuple([p.clone_to_new_node(self) for p in entry(3)])
-        # defaults for execution pins
+        print(f"entry = {entry}")
+        self.function:Callable = entry[0]
+
+        # default values
+        self.in_pins = tuple()
+        self.out_pins = tuple()
+        self.node_type = tuple()
         self.exec_in_pin = None
         self.exec_out_pins = tuple()
-        # figure out real values for execution pins
+
+        # load real values
+        if entry[1] is not None:
+            self.in_pins = tuple([p.clone_to_new_node(self) for p in entry[1]])
+        if entry[2] is not None:
+            self.out_pins = tuple([p.clone_to_new_node(self) for p in entry[2]])
+            for out_pin in self.out_pins:
+                out_pin.out = True
+        if entry[3] is not None:
+            self.node_type = entry[3]
+
+        # load real values for execution pins
         match self.node_type:
             case NodeType.JustInTime:
                 pass    # no modifications needed on "just-in-time" nodes.
@@ -170,7 +180,7 @@ class LemmaScriptNode:
                 self.exec_out_pins = tuple((ExecutionPin(name="exec-out", node=self),))
             case NodeType.Macro:
                 self.exec_in_pin = ExecutionPin(name="exec-in", node=self)
-                self.exec_out_pins = tuple([p.clone_to_new_node(self) for p in entry(4)])
+                self.exec_out_pins = tuple([p.clone_to_new_node(self) for p in entry[4]]) if entry[4] is not None else tuple((ExecutionPin(name="exec-out", node=self),))
             case _:
                 raise NotImplementedError(f"LemmaScriptNode.__init__() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
 
