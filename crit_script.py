@@ -1,24 +1,23 @@
-"""LemmaScript to Python conversions:
+"""CritScript to Python conversions:
 
 """
+
+## TODO planned redesign: make these functions NOT flood the call stack...
+# so we'll have to...
+#  * have a while loop which starts with an execution pin, and invokes the attached function
+#  * have the next execution pin to be called be returned by invoke() instead of returning nothing
+#  * set the current execution pin to the newly returned one from invoke()
+#  * then loop again until the execution pin has no friend.
+
 from enum import Enum
 from typing import Callable
-
-LEMMA_SCRIPT_FUNCTIONS = dict()
-"""Dictionary of all Lemma Script functions, populated by calling ``add_to_lemma_script``.
-
-* See Also: ``add_to_lemma_script``"""
-
-def sanitize_identifier(identifier:str):
-    """Makes a given identifier comply with the lower-kebab-case variable names in LemmaScript."""
-    return identifier.replace("_", "-").replace(" ","-").lower()
 
 class NodeType(Enum):
     JustInTime = 0
     """This node will only be executed "just-in-time", and will not include any execution pins."""
     Standard = 1
     """This node will automatically include an exec-in and exec-out pin."""
-    Macro = 2   ## TODO implement!
+    Macro = 2
     """This node automatically includes an exec-in pin, user must add any output execution pins manually.
     The list returned by this node's function MUST end with an integer indicating which execution pin to use!
 
@@ -28,25 +27,25 @@ class NodeType(Enum):
     # exec-out output."""
 
 
-class LemmaScriptException(Exception):
+class CritScriptException(Exception):
     def __init__(self, message):
         super().__init__(message)
 
-class NotActuallyALemmaFunctionException(LemmaScriptException):
+class InvalidCritScriptFunctionException(CritScriptException):
     def __init__(self, function):
         super().__init__(f"{function.__name__} must return a list of outputs, but does not.")
 
 
-class LemmaScriptPin:
-    def __init__(self, name:str="unnamed", node:'LemmaScriptNode|None'=None, out:bool=False):
+class CritScriptPin:
+    def __init__(self, name:str="unnamed", node:'CritScriptNode|None'=None, out:bool=False):
         self.name:str = name
-        self.node:LemmaScriptNode|None = node
+        self.node:CritScriptNode|None = node
         self.conducted_type:type|None = None
-        self.out:bool = out     # Needs to be set by the LemmaScriptNode constructor!
-        self.friend:LemmaScriptPin|None = None  # The other pin this one is connected to.
+        self.out:bool = out     # Needs to be set by the CritScriptNode constructor!
+        self.friend:CritScriptPin|None = None  # The other pin this one is connected to.
 
-    def clone_to_new_node(self, node:'LemmaScriptNode|None'=None):
-        return_value = LemmaScriptPin(name=self.name, node=self.node)
+    def clone_to_new_node(self, node:'CritScriptNode|None'=None):
+        return_value = CritScriptPin(name=self.name, node=self.node)
         return_value.node = node
         return_value.conducted_type = self.conducted_type
         return_value.out = self.out
@@ -55,7 +54,7 @@ class LemmaScriptPin:
 
 
 
-    def can_connect(self, other:'LemmaScriptPin') -> bool:
+    def can_connect(self, other:'CritScriptPin') -> bool:
         """Returns whether two pins can be connected.
 
         In order for two pins to connect:
@@ -70,7 +69,7 @@ class LemmaScriptPin:
             return other.can_connect(self)
         else:
             return False
-    def try_connect(self, other:'LemmaScriptPin') -> bool:
+    def try_connect(self, other:'CritScriptPin') -> bool:
         succeeds = self.can_connect(other)
         if succeeds:
             self.friend = other
@@ -91,66 +90,72 @@ class LemmaScriptPin:
         return self.friend is not None
 
 
-class LemmaScriptValuePin(LemmaScriptPin):
+class CritScriptValuePin(CritScriptPin):
     def __init__(self, conducted_type:type|None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.conducted_type:type|None = conducted_type
 
-    def get_value(self):
+    def read_value(self):
         raise NotImplemented()  # MUST be implemented on each subclass!
 
-class BundlePin(LemmaScriptValuePin):
+    def write_value(self, value):
+        raise NotImplemented()  # MUST be implemented on each subclass!
+
+class BundlePin(CritScriptValuePin):
     pass  ## TODO implement!
 
-class ExecutionPin(LemmaScriptPin):
+class ExecutionPin(CritScriptPin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def execute(self):
-        """Executes the node that owns the in pin. TODO document better!"""
-        if self.has_friend():
-            if self.out:
-                self.friend.node.invoke()
-            else:
-                self.node.invoke()
-        else:
-            pass
+        """TODO document better!"""
+        if not self.out:    # Only invokes on an in pin.
+            self.node.invoke()
+        ## TODO should we raise an error on an out pin?
 
-    # def execute_backwards(self):
-    #     """Executes the node that owns the out pin. TODO document better!"""
-    #     if self.has_friend():
-    #         if self.out:
-    #             self.node.invoke()
-    #         else:
-    #             self.friend.node.invoke()
-    #     else:
-    #         pass
+    def get_next(self):
+        if self.out:
+            return self.friend
+        ## TODO should we raise an error on an in pin?
 
-class StringPin(LemmaScriptValuePin):
+class StringPin(CritScriptValuePin):
     def __init__(self, last_value:str|None=None, *args, **kwargs,):
         super().__init__(conducted_type=str, *args, **kwargs)
         self.last_value:float|None = last_value
 
-    def get_value(self):
+    def read_value(self):
         if self.node.is_just_in_time_node():
             raise NotImplementedError()     ## TODO implement just-in-time logic!
         else:
             return self.last_value
 
-class NumberPin(LemmaScriptValuePin):
+    def write_value(self, value):
+        self.last_value = value
+
+class NumberPin(CritScriptValuePin):
     def __init__(self, last_value:float|None=None, *args, **kwargs):
         super().__init__(conducted_type=float, *args, **kwargs)
         self.last_value:float|None = last_value
+
+    def read_value(self):
+        if self.node.is_just_in_time_node():
+            raise NotImplementedError()     ## TODO implement just-in-time logic!
+        else:
+            return self.last_value
+
+    def write_value(self, value):
+        self.last_value = value
 
 class Position:
     def __init__(self, x:float=0.0, y:float=0.0):
         self.x:float = x
         self.y:float = y
 
-class LemmaScriptNode:
+class CritScriptNode:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
-        entry = LEMMA_SCRIPT_FUNCTIONS[function_name]
+        entry = CRIT_SCRIPT_FUNCTIONS[function_name]
         print(f"entry = {entry}")
         self.function:Callable = entry[0]
 
@@ -178,11 +183,14 @@ class LemmaScriptNode:
             case NodeType.Standard:
                 self.exec_in_pin = ExecutionPin(name="exec-in", node=self)
                 self.exec_out_pins = tuple((ExecutionPin(name="exec-out", node=self),))
+                self.exec_out_pins[0].out = True
             case NodeType.Macro:
                 self.exec_in_pin = ExecutionPin(name="exec-in", node=self)
                 self.exec_out_pins = tuple([p.clone_to_new_node(self) for p in entry[4]]) if entry[4] is not None else tuple((ExecutionPin(name="exec-out", node=self),))
+                for pin in self.exec_out_pins:
+                    pin.out = True
             case _:
-                raise NotImplementedError(f"LemmaScriptNode.__init__() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
+                raise NotImplementedError(f"CritScriptNode.__init__() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
 
     def is_just_in_time_node(self) -> bool:
         """Whether this Node is invoked as a "just in time" node, or if it needs to be invoked explicitly via its
@@ -191,7 +199,7 @@ class LemmaScriptNode:
 
     def invoke(self) -> None:
         print(f"Invoking {sanitize_identifier(self.function.__name__)}...")
-        result = self.function.__call__(*[pin.get_value() for pin in self.in_pins])
+        result = self.function.__call__(*[pin.read_value() for pin in self.in_pins])
         match self.node_type:
             case NodeType.JustInTime:
                 pass
@@ -200,30 +208,45 @@ class LemmaScriptNode:
             case NodeType.Macro:
                 self.exec_out_pins[result[-1]].execute()
             case _:
-                raise NotImplementedError(f"LemmaScriptNode.invoke() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
+                raise NotImplementedError(f"CritScriptNode.invoke() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
+        # update out pins
+        # NOTE: If this throws an error, it's because there's a mismatch between the values leaving the wrapped function, and the values the node is configured to actually output.
+        # TODO add an exception here for cases where that happens so we can explain that to the useer!
+        for index, value in enumerate(result):
+            self.out_pins[index].write_value(value)
 
-def add_to_lemma_script(
+
+def add_to_crit_script(
         function,
-        inputs:tuple[LemmaScriptValuePin, ...]|None=None,
-        outputs:tuple[LemmaScriptValuePin, ...]|None=None,
+        inputs:tuple[CritScriptValuePin, ...]|None=None,
+        outputs:tuple[CritScriptValuePin, ...]|None=None,
         node_type:NodeType=NodeType.Standard,
         exec_out_pins:tuple[ExecutionPin, ...] = tuple(),
     ):
     identifier = sanitize_identifier(function.__name__)
     if node_type is not NodeType.Macro:
-        LEMMA_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type)
+        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type)
     else:
-        LEMMA_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
+        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
 
 def make_node(name):
-    return LemmaScriptNode(sanitize_identifier(name))
+    return CritScriptNode(sanitize_identifier(name))
 
-def lemma_script(function):
-    """Function decorator for any LemmaScript function. TODO make this automatically add the function to lemma script!!!"""
+def crit_script(function):
+    """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!
+    TODO this stops us from wrapping stuff correctly, find some ways around saving everything in the "wrapper" key in CRIT_SCRIPT_FUNCTIONS. Don't just remove this all hare-brained-like."""
     def wrapper(*args, **kwargs):
         return_values = function(*args, **kwargs)
         if not isinstance(return_values, list):
-            raise NotActuallyALemmaFunctionException(function.__name__) ## TODO is this necessary?
+            raise InvalidCritScriptFunctionException(function.__name__) ## TODO is this necessary?
         return return_values
     return wrapper
 
+CRIT_SCRIPT_FUNCTIONS = dict()
+"""Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``.
+
+* See Also: ``add_to_crit_script``"""
+
+def sanitize_identifier(identifier:str):
+    """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
+    return identifier.replace("_", "-").replace(" ","-").lower()
