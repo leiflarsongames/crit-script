@@ -1,5 +1,4 @@
 """CritScript to Python conversions:
-
 """
 
 ## TODO planned redesign: make these functions NOT flood the call stack...
@@ -11,6 +10,8 @@
 
 from enum import Enum
 from typing import Callable
+
+POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarsongames@gmail.com"
 
 class NodeType(Enum):
     JustInTime = 0
@@ -34,7 +35,6 @@ class CritScriptException(Exception):
 class InvalidCritScriptFunctionException(CritScriptException):
     def __init__(self, function):
         super().__init__(f"{function.__name__} must return a list of outputs, but does not.")
-
 
 class CritScriptPin:
     def __init__(self, name:str="unnamed", node:'CritScriptNode|None'=None, out:bool=False):
@@ -108,16 +108,11 @@ class ExecutionPin(CritScriptPin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def execute(self):
-        """TODO document better!"""
-        if not self.out:    # Only invokes on an in pin.
-            self.node.invoke()
-        ## TODO should we raise an error on an out pin?
-
-    def get_next(self):
+    def get_next(self) -> 'ExecutionPin':
         if self.out:
             return self.friend
         ## TODO should we raise an error on an in pin?
+        return None
 
 class StringPin(CritScriptValuePin):
     def __init__(self, last_value:str|None=None, *args, **kwargs,):
@@ -231,6 +226,47 @@ def add_to_crit_script(
 
 def make_node(name):
     return CritScriptNode(sanitize_identifier(name))
+
+def can_run(start_from:ExecutionPin|CritScriptNode):
+    return (not (isinstance(start_from, CritScriptNode) and start_from.is_just_in_time_node()) and
+            not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
+            )
+def run(start_from:ExecutionPin|CritScriptNode):
+    start_pin:ExecutionPin
+    if isinstance(start_from, CritScriptNode):
+        if start_from.is_just_in_time_node():
+            raise ValueError("Cannot start execution from a \"just-in-time\" node!")
+            ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
+        elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
+            start_pin = start_from.exec_in_pin
+        else:
+            ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
+            start_from = start_from.exec_out_pins[0]    # punt the decision for what the start_pin is to the next if block.
+    if isinstance(start_from, ExecutionPin):
+        if start_from.out:
+            if not start_from.has_friend():
+                raise ValueError("Cannot start execution from an \"out\" node with no connections!")
+            else:
+                start_pin = start_from.friend
+        else:
+            start_pin = start_from
+    else:
+        raise NotImplementedError(f"In CritScript, run() was not implemented for start_from with type={start_from.__class__.__name__} with value={start_from}.\n"
+                                  f"{POST_MAINTAINER_CONTACT_INFORMATION}")     ## NOTE nothing should be able to do this.
+
+    ## NOTE start_pin is guaranteed to be an in-pin by now.
+    
+
+
+
+    ## TODO have a more semantically meaningful loop condition for easier reading!
+    while True:
+        """TODO document better!"""
+        if not self.out:  # Only invokes on an in pin.
+            return self.node.invoke()
+        ## TODO should we raise an error on an out pin?
+        return None
+
 
 def crit_script(function):
     """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!
