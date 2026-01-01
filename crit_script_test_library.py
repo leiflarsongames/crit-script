@@ -1,10 +1,10 @@
 from crit_script import *
 
-@crit_script
+# @crit_script
 def get_test_values():
     return "One", "Two", "Three"
 
-@crit_script
+# @crit_script
 def debug_print(inputs:tuple[str]):
     print(inputs)
 
