@@ -1,12 +1,6 @@
 """CritScript to Python conversions:
 """
 from dataclasses import dataclass
-## TODO planned redesign: make these functions NOT flood the call stack...
-# so we'll have to...
-#  * have a while loop which starts with an execution pin, and invokes the attached function
-#  * have the next execution pin to be called be returned by invoke() instead of returning nothing
-#  * set the current execution pin to the newly returned one from invoke()
-#  * then loop again until the execution pin has no friend.
 
 from enum import Enum
 from typing import Callable, Any
@@ -200,6 +194,14 @@ def can_run(start_from:ExecutionPin|CritScriptNode):
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
             )
 def run(start_from:ExecutionPin|CritScriptNode):
+    """
+    # so we'll have to...
+    #  * have a while loop which starts with an execution pin, and invokes the attached function
+    #  * have the next execution pin to be called be returned by invoke() instead of returning nothing
+    #  * set the current execution pin to the newly returned one from invoke()
+    #  * then loop again until the execution pin has no friend.
+    # TODO what the hell does this pass for documentation?!
+    """
     start_pin:ExecutionPin
     if isinstance(start_from, CritScriptNode):
         start_from:CritScriptNode
