@@ -95,19 +95,14 @@ class ValuePin(CritScriptPin):
             return self.last_value
 
     def write_value(self, value):
-        if isinstance(self.last_value, self.conducted_type):
-            return self.last_value
+        if isinstance(value, self.conducted_type):
+            self.last_value = value
         else:
             raise ValueError(f"Cannot write a value of type={value.__class__.__name__} to a pin which conducts type={self.conducted_type}!")
 
 class ExecutionPin(CritScriptPin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def get_next(self) -> 'ExecutionPin':
-        if self.out:
-            return self.friend
-        return None
 
 @dataclass
 class Position:
