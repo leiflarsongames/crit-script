@@ -52,8 +52,6 @@ class CritScriptPin:
         return_value.friend = None
         return return_value
 
-
-
     def can_connect(self, other:'CritScriptPin') -> bool:
         """Returns whether two pins can be connected.
 
@@ -130,23 +128,23 @@ class CritScriptNode:
         self.function:Callable = entry[0]
 
         # default values
-        self.in_pins:tuple[ValuePin] = tuple()
-        self.out_pins:tuple[ValuePin] = tuple()
+        self.in_pins:list[ValuePin] = list()
+        self.out_pins:list[ValuePin] = list()
         self.node_type:NodeType = NodeType.Standard
         self.exec_in_pin:ExecutionPin = None
-        self.exec_out_pins:tuple[ExecutionPin] = tuple()
+        self.exec_out_pins:list[ExecutionPin] = list()
 
         # load real values
         if entry[1] is not None:
-            self.in_pins = tuple([p.clone_to_new_node(self) for p in entry[1]])
+            self.in_pins = list([p.clone_to_new_node(self) for p in entry[1]])
         if entry[2] is not None:
-            self.out_pins:tuple[ValuePin] = tuple([p.clone_to_new_node(self) for p in entry[2]])
-            for index, out_pin in enumerate(self.out_pins):
-                self.out_pins[index] = ValuePin(
-                    conducted_type = self.out_pins[index].conducted_type,
-                    name = self.out_pins[index].name,
-                    node = self,
-                )
+            self.out_pins:list[ValuePin] = list([p.clone_to_new_node(self) for p in entry[2]])
+            # for index, out_pin in enumerate(self.out_pins):
+            #     self.out_pins[index] = ValuePin(
+            #         conducted_type = self.out_pins[index].conducted_type,
+            #         name = self.out_pins[index].name,
+            #         node = self,
+            #     )
         if entry[3] is not None:
             self.node_type = entry[3]
 
@@ -156,11 +154,11 @@ class CritScriptNode:
                 pass    # no modifications needed on "just-in-time" nodes.
             case NodeType.Standard:
                 self.exec_in_pin = ExecutionPin(name="exec-in", node=self)
-                self.exec_out_pins = tuple((ExecutionPin(name="exec-out", node=self),))
+                self.exec_out_pins = list((ExecutionPin(name="exec-out", node=self),))
                 self.exec_out_pins[0].out = True
             case NodeType.Macro:
                 self.exec_in_pin = ExecutionPin(name="exec-in", node=self)
-                self.exec_out_pins = tuple([p.clone_to_new_node(self) for p in entry[4]]) if entry[4] is not None else tuple((ExecutionPin(name="exec-out", node=self),))
+                self.exec_out_pins = list([p.clone_to_new_node(self) for p in entry[4]]) if entry[4] is not None else list((ExecutionPin(name="exec-out", node=self),))
                 for pin in self.exec_out_pins:
                     pin.out = True
             case _:
@@ -188,7 +186,7 @@ class CritScriptNode:
         ## SELECT OUTGOING EXECUTION PIN
         # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
         if self.node_type is NodeType.Macro:
-            exec_out_index = result[-1]     # Macros write which execution pin to use in the last position of their returned tuple.
+            exec_out_index = result[-1]     # Macros write which execution pin to use in the last position of their returned list.
             return self.exec_out_pins[exec_out_index]
         elif self.node_type is NodeType.JustInTime:
             return None
@@ -243,18 +241,25 @@ def make_node(name):
 
 def add_to_crit_script(
         function,
-        inputs:tuple[ValuePin, ...]|None=None,
-        outputs:tuple[ValuePin, ...]|None=None,
+        inputs:list[ValuePin, ...]|tuple[ValuePin, ...]|None=None,
+        outputs:list[ValuePin, ...]|tuple[ValuePin, ...]|None=None,
         node_type:NodeType=NodeType.Standard,
-        exec_out_pins:tuple[ExecutionPin, ...] = tuple(),
+        exec_out_pins:list[ExecutionPin, ...] = list(),
     ):
+    if isinstance(inputs, tuple):
+        inputs = list(inputs)
+    if isinstance(outputs, tuple):
+        outputs = list(outputs)
     identifier = sanitize_identifier(function.__name__)
     if node_type is not NodeType.Macro:
         CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type)
     else:
         CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
 
-def crit_script(function, ):
+def crit_script(function,
+                ## TODO once this doesn't break shit, can we move the parameters from ``add_to_crit_script`` to here?
+                ## TODO That would be so cool!!!
+                ):
     """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!"""
     def subfunction(*args, **kwargs):
 
@@ -274,3 +279,8 @@ CRIT_SCRIPT_FUNCTIONS = dict()
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
     return identifier.replace("_", "-").replace(" ","-").lower()
+
+
+def Pin(type: type | None = str, name: str = "unnamed"):
+    """Shorthand for creating ValuePins of a given type and name."""
+    return ValuePin(conducted_type=type, name=name)

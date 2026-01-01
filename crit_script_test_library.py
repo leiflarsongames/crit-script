@@ -13,15 +13,15 @@ def setup():
         get_test_values,
         inputs=None,
         outputs=(
-            StringPin(name="value-out-0"),
-            StringPin(name="value-out-1"),
-            StringPin(name="value-out-2"),
+            Pin(type=str, name="value-out-0"),
+            Pin(type=str, name="value-out-1"),
+            Pin(type=str, name="value-out-2"),
         )
     )
     add_to_crit_script(
         debug_print,
         inputs=(
-            StringPin(name="value-in-0"),
+            Pin(type=str, name="value-in-0"),
         )
     )
 
