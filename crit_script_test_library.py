@@ -39,7 +39,7 @@ def main():
     print(f"  connect execution line : {node_0.exec_out_pins[0].try_connect(node_1.exec_in_pin)}")
 
     print("Running...")
-    start_pin.execute()
+    run(start_pin)
 
 setup()
 print(f"keys = {', '.join(CRIT_SCRIPT_FUNCTIONS.keys())}")

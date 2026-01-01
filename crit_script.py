@@ -165,7 +165,7 @@ class CritScriptNode:
         if entry[1] is not None:
             self.in_pins = tuple([p.clone_to_new_node(self) for p in entry[1]])
         if entry[2] is not None:
-            self.out_pins = tuple([p.clone_to_new_node(self) for p in entry[2]])
+            self.out_pins:tuple[CritScriptValuePin] = tuple([p.clone_to_new_node(self) for p in entry[2]])
             for out_pin in self.out_pins:
                 out_pin.out = True
         if entry[3] is not None:
@@ -204,7 +204,8 @@ class CritScriptNode:
         for index, result_value in enumerate(result[0:last_index]):
             # NOTE: If this throws an error, it's because there's a mismatch between the values leaving the wrapped function, and the values the node is configured to actually output.
             # TODO add an exception here for cases where that happens so we can explain that to the user!
-            self.out_pins[index].write_value(result_value)
+            out_pin:CritScriptValuePin = self.out_pins[index]
+            out_pin.write_value(result_value)
 
         ## SELECT OUTGOING EXECUTION PIN
         # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
@@ -246,7 +247,7 @@ def run(start_from:ExecutionPin|CritScriptNode):
             raise ValueError("Cannot start execution from a \"just-in-time\" node!")
             ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
         elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
-            start_pin = start_from.exec_in_pin
+            in_pin = start_from.exec_in_pin
         else: ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
             # punt the decision for what the start_pin is to the next if block.
             start_from:ExecutionPin = start_from.exec_out_pins[0]
@@ -256,20 +257,25 @@ def run(start_from:ExecutionPin|CritScriptNode):
             if not start_from.has_friend():
                 raise ValueError("Cannot start execution from an \"out\" node with no connections!")
             else:
-                start_pin = start_from.friend
+                in_pin = start_from.friend
         else:
-            start_pin = start_from
+            in_pin = start_from
     else:
         ## Posts maintainer's contact information and each parameter. Note that more context is probably needed.
         raise NotImplementedError(f"In CritScript, run() was not implemented for start_from with type={start_from.__class__.__name__} with value={start_from}.\n"
                                   f"{POST_MAINTAINER_CONTACT_INFORMATION}")     ## NOTE nothing should be able to do this.
 
-    ## NOTE start_pin is guaranteed to be an in-pin by now.
+    ## NOTE in_pin is guaranteed to be an in-pin by now.
 
     ## EXECUTION LOOP
-    while start_pin and start_pin.node is not None:
+    while in_pin and in_pin.node is not None:
         """TODO document better!"""
-        out_pin = start_pin.node.invoke()
+        out_pin = in_pin.node.invoke()
+        if out_pin.has_friend():
+            in_pin = out_pin.friend
+        else:
+            in_pin = None
+
 
 
 
