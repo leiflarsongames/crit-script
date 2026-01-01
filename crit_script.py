@@ -155,11 +155,11 @@ class CritScriptNode:
         self.function:Callable = entry[0]
 
         # default values
-        self.in_pins = tuple()
-        self.out_pins = tuple()
-        self.node_type = tuple()
-        self.exec_in_pin = None
-        self.exec_out_pins = tuple()
+        self.in_pins:tuple[CritScriptValuePin] = tuple()
+        self.out_pins:tuple[CritScriptValuePin] = tuple()
+        self.node_type:NodeType = NodeType.Standard
+        self.exec_in_pin:ExecutionPin = None
+        self.exec_out_pins:tuple[ExecutionPin] = tuple()
 
         # load real values
         if entry[1] is not None:
@@ -192,7 +192,8 @@ class CritScriptNode:
         execution pin input before it's used."""
         return self.node_type is NodeType.JustInTime
 
-    def invoke(self) -> None:
+    def invoke(self) -> ExecutionPin | None:
+        """Returns the out pin from this node, if it exists."""
         print(f"Invoking {sanitize_identifier(self.function.__name__)}...")
         result = self.function.__call__(*[pin.read_value() for pin in self.in_pins])
         match self.node_type:
@@ -204,11 +205,24 @@ class CritScriptNode:
                 self.exec_out_pins[result[-1]].execute()
             case _:
                 raise NotImplementedError(f"CritScriptNode.invoke() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
-        # update out pins
-        # NOTE: If this throws an error, it's because there's a mismatch between the values leaving the wrapped function, and the values the node is configured to actually output.
-        # TODO add an exception here for cases where that happens so we can explain that to the useer!
-        for index, value in enumerate(result):
-            self.out_pins[index].write_value(value)
+
+        # UPDATE OUTGOING VALUE PINS
+        last_index = -2 if self.node_type is NodeType.Macro else -1
+        for index, result_value in enumerate(result[0:last_index]):
+            # NOTE: If this throws an error, it's because there's a mismatch between the values leaving the wrapped function, and the values the node is configured to actually output.
+            # TODO add an exception here for cases where that happens so we can explain that to the user!
+            self.out_pins[index].write_value(result_value)
+
+        ## SELECT OUTGOING EXECUTION PIN
+        # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
+        if self.node_type is NodeType.Macro:
+            exec_out_index = result[-1]     # Macros write which execution pin to use in the last position of their returned tuple.
+            return self.exec_out_pins[exec_out_index]
+        elif self.node_type is NodeType.JustInTime:
+            return None
+        else:
+            return self.exec_out_pins[0]    # return the only exec-out pin.
+
 
 
 def add_to_crit_script(
@@ -234,15 +248,17 @@ def can_run(start_from:ExecutionPin|CritScriptNode):
 def run(start_from:ExecutionPin|CritScriptNode):
     start_pin:ExecutionPin
     if isinstance(start_from, CritScriptNode):
+        start_from:CritScriptNode
         if start_from.is_just_in_time_node():
             raise ValueError("Cannot start execution from a \"just-in-time\" node!")
             ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
         elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
             start_pin = start_from.exec_in_pin
-        else:
-            ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
-            start_from = start_from.exec_out_pins[0]    # punt the decision for what the start_pin is to the next if block.
+        else: ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
+            # punt the decision for what the start_pin is to the next if block.
+            start_from:ExecutionPin = start_from.exec_out_pins[0]
     if isinstance(start_from, ExecutionPin):
+        start_from:ExecutionPin
         if start_from.out:
             if not start_from.has_friend():
                 raise ValueError("Cannot start execution from an \"out\" node with no connections!")
@@ -251,21 +267,18 @@ def run(start_from:ExecutionPin|CritScriptNode):
         else:
             start_pin = start_from
     else:
+        ## Posts maintainer's contact information and each parameter. Note that more context is probably needed.
         raise NotImplementedError(f"In CritScript, run() was not implemented for start_from with type={start_from.__class__.__name__} with value={start_from}.\n"
                                   f"{POST_MAINTAINER_CONTACT_INFORMATION}")     ## NOTE nothing should be able to do this.
 
     ## NOTE start_pin is guaranteed to be an in-pin by now.
-    
 
-
-
-    ## TODO have a more semantically meaningful loop condition for easier reading!
-    while True:
+    ## EXECUTION LOOP
+    while start_pin and start_pin.node is not None:
         """TODO document better!"""
-        if not self.out:  # Only invokes on an in pin.
-            return self.node.invoke()
-        ## TODO should we raise an error on an out pin?
-        return None
+        out_pin = start_pin.node.invoke()
+
+
 
 
 def crit_script(function):
