@@ -219,22 +219,6 @@ class CritScriptNode:
 
 
 
-def add_to_crit_script(
-        function,
-        inputs:tuple[CritScriptValuePin, ...]|None=None,
-        outputs:tuple[CritScriptValuePin, ...]|None=None,
-        node_type:NodeType=NodeType.Standard,
-        exec_out_pins:tuple[ExecutionPin, ...] = tuple(),
-    ):
-    identifier = sanitize_identifier(function.__name__)
-    if node_type is not NodeType.Macro:
-        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type)
-    else:
-        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
-
-def make_node(name):
-    return CritScriptNode(sanitize_identifier(name))
-
 def can_run(start_from:ExecutionPin|CritScriptNode):
     return (not (isinstance(start_from, CritScriptNode) and start_from.is_just_in_time_node()) and
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
@@ -276,24 +260,35 @@ def run(start_from:ExecutionPin|CritScriptNode):
         else:
             in_pin = None
 
+def make_node(name):
+    return CritScriptNode(sanitize_identifier(name))
 
-
-
+def add_to_crit_script(
+        function,
+        inputs:tuple[CritScriptValuePin, ...]|None=None,
+        outputs:tuple[CritScriptValuePin, ...]|None=None,
+        node_type:NodeType=NodeType.Standard,
+        exec_out_pins:tuple[ExecutionPin, ...] = tuple(),
+    ):
+    identifier = sanitize_identifier(function.__name__)
+    if node_type is not NodeType.Macro:
+        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type)
+    else:
+        CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
 
 def crit_script(function):
-    """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!
-    TODO this stops us from wrapping stuff correctly, find some ways around saving everything in the "wrapper" key in CRIT_SCRIPT_FUNCTIONS. Don't just remove this all hare-brained-like."""
-    def wrapper(*args, **kwargs):
+    """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!"""
+    def subfunction(*args, **kwargs):
+
         return_values = function(*args, **kwargs)
         if not isinstance(return_values, list):
             raise InvalidCritScriptFunctionException(function.__name__) ## TODO is this necessary?
         return return_values
-    return wrapper
+    subfunction.__name__ = function.__name__    # this is hilarious.
+    return subfunction
 
 CRIT_SCRIPT_FUNCTIONS = dict()
-"""Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``.
-
-* See Also: ``add_to_crit_script``"""
+"""Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``."""
 
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
