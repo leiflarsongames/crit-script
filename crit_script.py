@@ -195,16 +195,9 @@ class CritScriptNode:
     def invoke(self) -> ExecutionPin | None:
         """Returns the out pin from this node, if it exists."""
         print(f"Invoking {sanitize_identifier(self.function.__name__)}...")
+
+        ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         result = self.function.__call__(*[pin.read_value() for pin in self.in_pins])
-        match self.node_type:
-            case NodeType.JustInTime:
-                pass
-            case NodeType.Standard:
-                self.exec_out_pins[0].execute()
-            case NodeType.Macro:
-                self.exec_out_pins[result[-1]].execute()
-            case _:
-                raise NotImplementedError(f"CritScriptNode.invoke() is not implemented for case node_type={self.node_type}!")     # TODO write something for this!
 
         # UPDATE OUTGOING VALUE PINS
         last_index = -2 if self.node_type is NodeType.Macro else -1
