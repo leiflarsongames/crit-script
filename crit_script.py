@@ -1,6 +1,6 @@
 """CritScript to Python conversions:
 """
-
+from dataclasses import dataclass
 ## TODO planned redesign: make these functions NOT flood the call stack...
 # so we'll have to...
 #  * have a while loop which starts with an execution pin, and invokes the attached function
@@ -9,7 +9,7 @@
 #  * then loop again until the execution pin has no friend.
 
 from enum import Enum
-from typing import Callable
+from typing import Callable, Any
 
 POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarsongames@gmail.com"
 
@@ -90,19 +90,23 @@ class CritScriptPin:
         return self.friend is not None
 
 
-class CritScriptValuePin(CritScriptPin):
+class ValuePin(CritScriptPin):
     def __init__(self, conducted_type:type|None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.conducted_type:type|None = conducted_type
+        self.last_value:Any = None
 
-    def read_value(self):
-        raise NotImplemented()  # MUST be implemented on each subclass!
+    def read_value(self) -> Any:
+        if self.node.is_just_in_time_node():
+            raise NotImplementedError()     ## TODO implement just-in-time logic!
+        else:
+            return self.last_value
 
     def write_value(self, value):
-        raise NotImplemented()  # MUST be implemented on each subclass!
-
-class BundlePin(CritScriptValuePin):
-    pass  ## TODO implement!
+        if isinstance(self.last_value, self.conducted_type):
+            return self.last_value
+        else:
+            raise ValueError(f"Cannot write a value of type={value.__class__.__name__} to a pin which conducts type={self.conducted_type}!")
 
 class ExecutionPin(CritScriptPin):
     def __init__(self, *args, **kwargs):
@@ -111,41 +115,12 @@ class ExecutionPin(CritScriptPin):
     def get_next(self) -> 'ExecutionPin':
         if self.out:
             return self.friend
-        ## TODO should we raise an error on an in pin?
         return None
 
-class StringPin(CritScriptValuePin):
-    def __init__(self, last_value:str|None=None, *args, **kwargs,):
-        super().__init__(conducted_type=str, *args, **kwargs)
-        self.last_value:float|None = last_value
-
-    def read_value(self):
-        if self.node.is_just_in_time_node():
-            raise NotImplementedError()     ## TODO implement just-in-time logic!
-        else:
-            return self.last_value
-
-    def write_value(self, value):
-        self.last_value = value
-
-class NumberPin(CritScriptValuePin):
-    def __init__(self, last_value:float|None=None, *args, **kwargs):
-        super().__init__(conducted_type=float, *args, **kwargs)
-        self.last_value:float|None = last_value
-
-    def read_value(self):
-        if self.node.is_just_in_time_node():
-            raise NotImplementedError()     ## TODO implement just-in-time logic!
-        else:
-            return self.last_value
-
-    def write_value(self, value):
-        self.last_value = value
-
+@dataclass
 class Position:
-    def __init__(self, x:float=0.0, y:float=0.0):
-        self.x:float = x
-        self.y:float = y
+    x:float = 0.0
+    y:float = 0.0
 
 class CritScriptNode:
     def __init__(self, function_name):
@@ -155,8 +130,8 @@ class CritScriptNode:
         self.function:Callable = entry[0]
 
         # default values
-        self.in_pins:tuple[CritScriptValuePin] = tuple()
-        self.out_pins:tuple[CritScriptValuePin] = tuple()
+        self.in_pins:tuple[ValuePin] = tuple()
+        self.out_pins:tuple[ValuePin] = tuple()
         self.node_type:NodeType = NodeType.Standard
         self.exec_in_pin:ExecutionPin = None
         self.exec_out_pins:tuple[ExecutionPin] = tuple()
@@ -165,9 +140,13 @@ class CritScriptNode:
         if entry[1] is not None:
             self.in_pins = tuple([p.clone_to_new_node(self) for p in entry[1]])
         if entry[2] is not None:
-            self.out_pins:tuple[CritScriptValuePin] = tuple([p.clone_to_new_node(self) for p in entry[2]])
-            for out_pin in self.out_pins:
-                out_pin.out = True
+            self.out_pins:tuple[ValuePin] = tuple([p.clone_to_new_node(self) for p in entry[2]])
+            for index, out_pin in enumerate(self.out_pins):
+                self.out_pins[index] = ValuePin(
+                    conducted_type = self.out_pins[index].conducted_type,
+                    name = self.out_pins[index].name,
+                    node = self,
+                )
         if entry[3] is not None:
             self.node_type = entry[3]
 
@@ -190,7 +169,7 @@ class CritScriptNode:
     def is_just_in_time_node(self) -> bool:
         """Whether this Node is invoked as a "just in time" node, or if it needs to be invoked explicitly via its
         execution pin input before it's used."""
-        return self.node_type is NodeType.JustInTime
+        return self.exec_in_pin is None
 
     def invoke(self) -> ExecutionPin | None:
         """Returns the out pin from this node, if it exists."""
@@ -204,8 +183,7 @@ class CritScriptNode:
         for index, result_value in enumerate(result[0:last_index]):
             # NOTE: If this throws an error, it's because there's a mismatch between the values leaving the wrapped function, and the values the node is configured to actually output.
             # TODO add an exception here for cases where that happens so we can explain that to the user!
-            out_pin:CritScriptValuePin = self.out_pins[index]
-            out_pin.write_value(result_value)
+            self.out_pins[index].write_value(result_value)
 
         ## SELECT OUTGOING EXECUTION PIN
         # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
@@ -265,8 +243,8 @@ def make_node(name):
 
 def add_to_crit_script(
         function,
-        inputs:tuple[CritScriptValuePin, ...]|None=None,
-        outputs:tuple[CritScriptValuePin, ...]|None=None,
+        inputs:tuple[ValuePin, ...]|None=None,
+        outputs:tuple[ValuePin, ...]|None=None,
         node_type:NodeType=NodeType.Standard,
         exec_out_pins:tuple[ExecutionPin, ...] = tuple(),
     ):
@@ -276,7 +254,7 @@ def add_to_crit_script(
     else:
         CRIT_SCRIPT_FUNCTIONS[identifier] = (function, inputs, outputs, node_type, exec_out_pins)
 
-def crit_script(function):
+def crit_script(function, ):
     """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!"""
     def subfunction(*args, **kwargs):
 
@@ -286,6 +264,9 @@ def crit_script(function):
         return return_values
     subfunction.__name__ = function.__name__    # this is hilarious.
     return subfunction
+
+# def crit_script_plugin(class):
+
 
 CRIT_SCRIPT_FUNCTIONS = dict()
 """Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``."""
