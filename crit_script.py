@@ -1,7 +1,4 @@
-"""CritScript to Python conversions:
-"""
 from dataclasses import dataclass
-
 from enum import Enum
 from typing import Callable, Any, Iterable
 
@@ -25,9 +22,9 @@ class NodeType(Enum):
     The list returned by this node's function MUST end with an integer indicating which execution pin to use!
 
     * Note: ``Macro`` is the only node type that allows manual addition of execution pins."""
-    External = -1   ## TODO implement!
-    """This node is an event which is callable from Python code. It may NOT have any inputs, and will include an
-    exec-out output. May include data outputs."""
+    # External = -1   ## TODO implement!
+    # """This node is an event which is callable from Python code. It may NOT have any inputs, and will include an
+    # exec-out output. May include data outputs."""
 
 
 class CritScriptException(Exception):
@@ -333,13 +330,13 @@ def run(start_from:ExecutionPin|CritScriptNode):
 def make_node(name):
     return CritScriptNode(sanitize_identifier(name))
 
-def add_to_crit_script(
+def _add_to_crit_script(
         function,
-        inputs:list[CritScriptPinPrototype]|tuple[CritScriptPinPrototype, ...]|None=None,
-        outputs:list[CritScriptPinPrototype]|tuple[CritScriptPinPrototype, ...]|None=None,
-        node_type:NodeType=NodeType.Standard,
-        exec_inputs:list[str]|None = None,
-        exec_outputs:list[str]|None = None,
+        inputs:Iterable[CritScriptPinPrototype]|None=None,
+        outputs:Iterable[CritScriptPinPrototype]|None=None,
+        node_type: NodeType = NodeType.Standard,
+        exec_inputs:Iterable[str|CritScriptPinPrototype]|None = None,
+        exec_outputs:Iterable[str|CritScriptPinPrototype]|None = None,
     ):
     if isinstance(inputs, tuple):
         inputs = list(inputs)
@@ -355,27 +352,80 @@ def add_to_crit_script(
     else:
         CRIT_SCRIPT_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs)
 
-# def crit_script(function,
-#                 ## TODO once this doesn't break shit, can we move the parameters from ``add_to_crit_script`` to here?
-#                 ## TODO That would be so cool!!!
-#                 ):
-#     """Function decorator for any CritScript function. TODO make this automatically add the function to CritScript!!!"""
-#     def crit_script_wrapper_fn(*args, **kwargs):
-#         return_values = function(*args, **kwargs)
-#         if not isinstance(return_values, list):
-#             raise InvalidCritScriptFunctionException(function.__name__) ## TODO is this necessary?
-#         return return_values
-#     crit_script_wrapper_fn.__name__ = function.__name__         # this is hilarious.
-#     crit_script_wrapper_fn.__qualname__ = function.__qualname__
-#     return crit_script_wrapper_fn
-
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
     return identifier.replace("_", "-").replace(" ","-").lower()
 
+def crit_script(
+        inputs:  Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
+        outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
+        just_in_time_node:bool = False,
+    ):
+    """Function decorator for any CritScript function that isn't a macro.
+    TODO document the return types and parameters here with examples!"""
+    ## Normalize inputs to be iterable
+    if inputs is None:
+        inputs = tuple()
+    elif not isinstance(inputs, Iterable):
+        inputs = (inputs,)
+    if outputs is None:
+        outputs = tuple()
+    elif not isinstance(outputs, Iterable):
+        outputs = (outputs,)
+    def decorator(function):
+        def wrapper(*sub_args, **sub_kwargs):
+            return function(*sub_args, **sub_kwargs)
+        wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
+        wrapper.__qualname__ = function.__qualname__
+        node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
+        _add_to_crit_script(wrapper, inputs, outputs, node_type)    # submits this function to CritScript
+        return wrapper
+    return decorator
+
+def crit_script_macro(
+        function,
+        inputs:  Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None=None,
+        outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None=None,
+        exec_inputs:  Iterable[str] | str | None = None,
+        exec_outputs: Iterable[str] | str | None = None,
+    ):
+    """Function decorator for any CritScript function that will become a macro.
+    TODO document the return types and parameters here with examples!"""
+
+    ## Normalize inputs to be iterable
+    if inputs is None:
+        inputs = tuple()
+    elif not isinstance(inputs, Iterable):
+        inputs  = (inputs,)
+    if outputs is None:
+        outputs = tuple()
+    elif not isinstance(outputs, Iterable):
+        outputs = (outputs,)
+    if exec_inputs is None:
+        exec_inputs = tuple()
+    elif not isinstance(exec_inputs, Iterable):
+        exec_inputs  = (exec_inputs,)
+    if exec_outputs is None:
+        exec_outputs = tuple()
+    elif not isinstance(exec_outputs, Iterable):
+        exec_outputs = (exec_outputs,)
+    def decorator(function):
+        def wrapper(*sub_args, **sub_kwargs):
+            return function(*sub_args, **sub_kwargs)
+        wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
+        wrapper.__qualname__ = function.__qualname__
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs) # submits this function to CritScript
+        return wrapper
+    return decorator
+
 def Pin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
     """Shorthand for prototyping a ValuePin of a given type and name."""
     return CritScriptPinPrototype(type, name)
+
+# ## TODO implement bundle pins!
+# def MultiPin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
+#     """Shorthand for prototyping a MultiValuePin of a given type and name."""
+#     return CritScriptPinPrototype(type, name)
 
 def Exec(name: str = "exec-unnamed") -> str:
     """Shorthand for prototyping an ExecutionPin of a given name."""

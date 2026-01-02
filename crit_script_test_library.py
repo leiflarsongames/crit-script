@@ -1,29 +1,20 @@
 from crit_script import *
 
-@crit_script
+
+
+@crit_script(
+    outputs=(
+        Pin(str, "value-out-0"),
+        Pin(str, "value-out-1"),
+        Pin(str, "value-out-2"),
+    ))
 def get_test_values():
     return "One", "Two", "Three"
 
-@crit_script
+
+@crit_script(inputs=(Pin(str, "value-in-0")))
 def debug_print(*inputs:str):
     print(*inputs)
-
-def setup():
-    add_to_crit_script(
-        get_test_values,
-        inputs=None,
-        outputs=(
-            Pin(str, "value-out-0"),
-            Pin(str, "value-out-1"),
-            Pin(str, "value-out-2"),
-        )
-    )
-    add_to_crit_script(
-        debug_print,
-        inputs=(
-            Pin(str, "value-in-0"),
-        )
-    )
 
 def main():
 
@@ -42,6 +33,5 @@ def main():
     print("Running...")
     run(start_pin)
 
-setup()
 print(f"keys = {', '.join(CRIT_SCRIPT_FUNCTIONS.keys())}")
 main()
