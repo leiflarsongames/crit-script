@@ -80,3 +80,19 @@ def roll_dice_expression(dice_algebra_expression: str):
     return Expression(dice_algebra_expression).evaluate()
 
 
+@crit_script_macro(
+    inputs=(Pin(float, "a"),
+            Pin(float, "b"),),
+    outputs=None,
+    exec_inputs=Exec("exec-in"),
+    exec_outputs=(Exec("a<b"),
+                  Exec("a=b"),
+                  Exec("a>b"))
+)
+def switch_compare(a, b) -> int:
+    if a < b:
+        return 0
+    elif a == b:
+        return 1
+    else:
+        return 2

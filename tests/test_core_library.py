@@ -116,6 +116,30 @@ class TestCoreLibrary(unittest.TestCase):
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
+    def test_switch_compare(self):
+        switch_node = make_node(switch_compare)
+        out_node_0 = make_node(test_buffer)
+        out_node_1 = make_node(test_buffer)
+        out_node_2 = make_node(test_buffer)
+        out_node_0.in_pins[0].write_value(500)  # when run, it will push this value to the output.
+        out_node_1.in_pins[0].write_value(500)
+        out_node_2.in_pins[0].write_value(500)
+
+        ## connect everything
+        self.assertTrue(switch_node.exec_out_pins[0].try_connect(out_node_0.exec_in_pins[0]),
+                        "Connecting execution line 0")
+        self.assertTrue(switch_node.exec_out_pins[1].try_connect(out_node_1.exec_in_pins[0]),
+                        "Connecting execution line 1")
+        self.assertTrue(switch_node.exec_out_pins[2].try_connect(out_node_2.exec_in_pins[0]),
+                        "Connecting execution line 2")
+        try:
+            switch_node.in_pins[0].write_value(-1)
+            switch_node.in_pins[1].write_value(12)
+            self.assertIsNone(out_node_0.out_pins[0].read_value(), "Assuring out_node_0's output starts as None")
+            run_graph(switch_node)
+            self.assertIsNotNode(out_node_0.out_pins[0].read_value(), "Assuring out_node_0's output becomes Something")
+        except Exception as e:
+            self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
 
 if __name__ == '__main__':
