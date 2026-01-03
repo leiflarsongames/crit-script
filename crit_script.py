@@ -4,7 +4,7 @@ from typing import Callable, Any, Iterable
 
 POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarsongames@gmail.com"
 
-CRIT_SCRIPT_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
+ALL_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
 """Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``."""
 ## TODO important! Update this to use `fn.__qualname__` internally instead of `sanitize_identifier(fn.__name__)`!
 ## TODO cont. because we can't handle ambiguity!
@@ -69,7 +69,9 @@ class CritScriptPin:
             #       f"other conducts {other.conducted_type}\n")
             return ( self.friend is None and
                     other.friend is None and
-                     self.conducted_type is other.conducted_type)
+                     (self.conducted_type is other.conducted_type or
+                      self.conducted_type is Any or
+                      other.conducted_type is Any)) ## Because this doesn't invite trouble at all, no way!!
         elif not self.out and other.out:
             return other.can_connect(self)
         else:
@@ -121,17 +123,29 @@ class ValuePin(CritScriptPin):
         else:
             if self.out:
                 return self.last_value
+            elif self.last_value is not None:
+                return self.last_value  ## If a value's been written in as a "magic number", read it.
             elif self.can_read_previous_pin_value():
                 return self.friend.last_value
             else:
                 return None
 
-
     def write_value(self, value):
-        if isinstance(value, self.conducted_type):
+        if self.conducted_type is Any:
+            self.last_value = value
+        elif isinstance(value, self.conducted_type):
             self.last_value = value
         else:
             raise ValueError(f"Cannot write a value of type={type(value)} to a pin which conducts type={self.conducted_type}!")
+
+    def has_magic_number(self):
+        return not self.out and self.last_value is not None
+
+    def can_add_magic_number(self):
+        return not self.out and self.last_value is None
+
+    can_edit_magic_number = has_magic_number
+
 
 class ExecutionPin(CritScriptPin):
     def __init__(self, *args, **kwargs):
@@ -158,15 +172,18 @@ class ExecutionPin(CritScriptPin):
             out=out,
         )
 
+
 @dataclass
 class Position:
     x:float = 0.0
     y:float = 0.0
 
+
 @dataclass
 class CritScriptPinPrototype:
     conducted_type:type|None = str
     name:str = "unnamed"
+
 
 @dataclass
 class CritScriptNodePrototype:
@@ -177,10 +194,11 @@ class CritScriptNodePrototype:
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
 
+
 class CritScriptNode:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
-        entry = CRIT_SCRIPT_FUNCTIONS[function_name]
+        entry = ALL_FUNCTIONS[_calc_func_identifier(function_name)]
 
         # default values
         self.node_type: NodeType = NodeType.Standard
@@ -218,12 +236,16 @@ class CritScriptNode:
             case _:
                 raise NotImplementedError(f"CritScriptNode.__init__() is not implemented for case node_type={self.node_type}!")
 
+    def read_all_out_pins(self) -> list:
+        """Returns a list of all out pins' data. Primarily for testing."""
+        return [pin.read_value() for pin in self.out_pins]
+
     def is_just_in_time_node(self) -> bool:
         """Whether this Node is invoked as a "just in time" node, or if it needs to be invoked explicitly via its
         execution pin input before it's used."""
         return len(self.exec_in_pins) == 0
 
-    def invoke(self, exec_in_index:int=0) -> ExecutionPin | None:
+    def invoke(self, exec_in_index:int=0, debug=False) -> ExecutionPin | None:
         """Returns the out pin from this node, if it exists."""
 
         # NOTE: For CritScript users:
@@ -243,8 +265,8 @@ class CritScriptNode:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
         finally:
-            print(f"Invoked {self.function.__qualname__}")
-
+            if debug:
+                print(f"Invoked {self.function.__qualname__}")
 
         ## ensure result is iterable
         if result is None:
@@ -273,22 +295,16 @@ class CritScriptNode:
             return self.exec_out_pins[0]    # return the only exec-out pin.
 
 
-
 ## CLASS-LESS FUNCTIONS
 
-def can_run(start_from:ExecutionPin|CritScriptNode):
+def can_run_graph(start_from:ExecutionPin|CritScriptNode):
+    """Whether ``run_graph`` can begin running from this node or execution pin."""
     return (not (isinstance(start_from, CritScriptNode) and start_from.is_just_in_time_node()) and
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
             )
-def run(start_from:ExecutionPin|CritScriptNode):
-    """
-    # so we'll have to...
-    #  * have a while loop which starts with an execution pin, and invokes the attached function
-    #  * have the next execution pin to be called be returned by invoke() instead of returning nothing
-    #  * set the current execution pin to the newly returned one from invoke()
-    #  * then loop again until the execution pin has no friend.
-    # TODO what the hell does this pass for documentation?!
-    """
+
+def run_graph(start_from: ExecutionPin | CritScriptNode):
+    """Runs a CritScript graph from the given node or execution pin."""
     start_pin:ExecutionPin
     if isinstance(start_from, CritScriptNode):
         start_from:CritScriptNode
@@ -296,11 +312,11 @@ def run(start_from:ExecutionPin|CritScriptNode):
             raise ValueError("Cannot start execution from a \"just-in-time\" node!")
             ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
         elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
-            in_pin = start_from.exec_in_pin
+            in_pin = start_from.exec_in_pins[0]     # Assume the first input execution pin is to be used.
         else: ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
             # punt the decision for what the start_pin is to the next if block.
             start_from:ExecutionPin = start_from.exec_out_pins[0]
-    if isinstance(start_from, ExecutionPin):
+    elif isinstance(start_from, ExecutionPin):
         start_from:ExecutionPin
         if start_from.out:
             if not start_from.has_friend():
@@ -318,17 +334,19 @@ def run(start_from:ExecutionPin|CritScriptNode):
 
     ## EXECUTION LOOP
     while in_pin and in_pin.node is not None:
-
         out_pin = in_pin.node.invoke()
-
         # advance to next in-pin, if available
         if out_pin.has_friend():
             in_pin = out_pin.friend
         else:
             in_pin = None
 
-def make_node(name):
-    return CritScriptNode(sanitize_identifier(name))
+def make_node(function:Callable):
+    """Creates a node from a function which has been submitted with an @crit_script decorator."""
+    return CritScriptNode(function)
+
+def _calc_func_identifier(fn:Callable) -> str:
+    return sanitize_identifier(fn.__qualname__)
 
 def _add_to_crit_script(
         function,
@@ -342,19 +360,21 @@ def _add_to_crit_script(
         inputs = list(inputs)
     if isinstance(outputs, tuple):
         outputs = list(outputs)
-    identifier = sanitize_identifier(function.__name__)
+    identifier = _calc_func_identifier(function)
     if node_type is NodeType.Macro:
         if exec_inputs is None:
             exec_inputs = list("exec-in")
         if exec_outputs is None:
             exec_outputs = list("exec-out")
-        CRIT_SCRIPT_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs)
     else:
-        CRIT_SCRIPT_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs)
 
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
     return identifier.replace("_", "-").replace(" ","-").lower()
+
+## CritScript Decorators
 
 def crit_script(
         inputs:  Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
@@ -417,6 +437,8 @@ def crit_script_macro(
         _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs) # submits this function to CritScript
         return wrapper
     return decorator
+
+## Decorator shorthand
 
 def Pin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
     """Shorthand for prototyping a ValuePin of a given type and name."""
