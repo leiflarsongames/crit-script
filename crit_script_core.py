@@ -89,7 +89,7 @@ def roll_dice_expression(dice_algebra_expression: str):
                   Exec("a=b"),
                   Exec("a>b"))
 )
-def switch_compare(a, b) -> int:
+def switch_compare(a, b, exec_in_index:int) -> int:
     if a < b:
         return 0
     elif a == b:

@@ -132,15 +132,47 @@ class TestCoreLibrary(unittest.TestCase):
                         "Connecting execution line 1")
         self.assertTrue(switch_node.exec_out_pins[2].try_connect(out_node_2.exec_in_pins[0]),
                         "Connecting execution line 2")
+        ## LESS THAN, PATH 0
         try:
-            switch_node.in_pins[0].write_value(-1)
-            switch_node.in_pins[1].write_value(12)
-            self.assertIsNone(out_node_0.out_pins[0].read_value(), "Assuring out_node_0's output starts as None")
+            switch_node.in_pins[0].write_value(-1.0)
+            switch_node.in_pins[1].write_value(12.0)
+            self.assertIsNone(out_node_0.out_pins[0].read_value(),
+                              "Assuring out_node_0's output starts as None")
             run_graph(switch_node)
-            self.assertIsNotNode(out_node_0.out_pins[0].read_value(), "Assuring out_node_0's output becomes Something")
+            self.assertIsNotNone(out_node_0.out_pins[0].read_value(),
+                                 "Assuring out_node_0's output becomes Something")
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
+        ## EQUALITY, PATH 1
+        try:
+            switch_node.in_pins[0].write_value(9.0)
+            switch_node.in_pins[1].write_value(9.0)
+            self.assertIsNone(out_node_1.out_pins[0].read_value(),
+                              "Assuring out_node_1's output starts as None")
+            run_graph(switch_node)
+            self.assertIsNotNone(out_node_1.out_pins[0].read_value(),
+                                 "Assuring out_node_1's output becomes Something")
+        except Exception as e:
+            self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
+
+        ## EQUALITY, PATH 1
+        try:
+            switch_node.in_pins[0].write_value(9.0)
+            switch_node.in_pins[1].write_value(7.0)
+            self.assertIsNone(out_node_2.out_pins[0].read_value(),
+                              "Assuring out_node_2's output starts as None")
+            run_graph(switch_node)
+            self.assertIsNotNone(out_node_2.out_pins[0].read_value(),
+                                 "Assuring out_node_2's output becomes Something")
+        except Exception as e:
+            self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
+
+    def test_count_and_reset(self):
+        raise NotImplementedError()
+
+    def test_for_loop(self):
+        raise NotImplementedError()
 
 if __name__ == '__main__':
     ## show all loaded functions

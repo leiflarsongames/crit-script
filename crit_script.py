@@ -136,7 +136,8 @@ class ValuePin(CritScriptPin):
         elif isinstance(value, self.conducted_type):
             self.last_value = value
         else:
-            raise ValueError(f"Cannot write a value of type={type(value)} to a pin which conducts type={self.conducted_type}!")
+            raise ValueError(
+                f"Cannot write a value of type={type(value)} to a pin which conducts type={self.conducted_type}!")
 
     def has_magic_number(self):
         return not self.out and self.last_value is not None
@@ -403,7 +404,6 @@ def crit_script(
     return decorator
 
 def crit_script_macro(
-        function,
         inputs:  Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None=None,
         outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None=None,
         exec_inputs:  Iterable[str] | str | None = None,
@@ -438,10 +438,10 @@ def crit_script_macro(
         return wrapper
     return decorator
 
-## Decorator shorthand
+## Decorator paramter shorthand
 
 def Pin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
-    """Shorthand for prototyping a ValuePin of a given type and name."""
+    """Shorthand for prototyping a ValuePin of a given type and name. Used in ``@crit_script`` an ``@crit_script_macro`` parameters"""
     return CritScriptPinPrototype(type, name)
 
 # ## TODO implement bundle pins!
