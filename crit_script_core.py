@@ -1,6 +1,6 @@
 from random import randint, random
 from typing import Any
-from crit_script import crit_script, Pin, Exec, crit_script_macro
+from crit_script import crit_script, Pin, Exec, crit_script_macro, CritScriptNode
 
 
 @crit_script(inputs=(Pin(str, "message")))
@@ -96,3 +96,23 @@ def switch_compare(a, b, exec_in_index:int) -> int:
         return 1
     else:
         return 2
+
+@crit_script_macro(
+    inputs=None,
+    outputs=Pin("current-count"),
+    exec_inputs=(Exec("exec-in"),
+                 Exec("reset"),
+                 Exec("add-one")),
+    exec_outputs=(Exec("exec-out"),
+                  Exec("reset-out"),
+                  Exec("added-one"),),
+    uses_node_context=True,
+)
+def count_and_reset(node:CritScriptNode, exec_in_index:int) -> tuple[int, int]:
+    if node.node_context is None:
+        node_context = 0
+    match exec_in_index:
+        case 0:
+            return
+        case 1:
+            node_context = 0

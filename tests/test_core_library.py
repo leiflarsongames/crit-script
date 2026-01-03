@@ -168,11 +168,26 @@ class TestCoreLibrary(unittest.TestCase):
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
-    def test_count_and_reset(self):
-        raise NotImplementedError()
 
-    def test_for_loop(self):
-        raise NotImplementedError()
+    # def test_count_and_reset(self): ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_modulo(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_negate(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_just_in_time_propagation(self):    ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_for_loop(self):        ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_signal(self):          ## TODO
+    #     raise NotImplementedError()
+
+
 
 if __name__ == '__main__':
     ## show all loaded functions
