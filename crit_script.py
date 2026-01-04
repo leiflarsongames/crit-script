@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Any, Iterable
 
-POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarsongames@gmail.com"
+POST_MAINTAINER_CONTACT_INFORMATION = "Please email the maintainer at leiflarsongames@gmail.com"
 
 ALL_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
 """Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``."""
@@ -26,12 +26,22 @@ class NodeType(Enum):
 
 
 class CritScriptException(Exception):
+    """Parent class for all CritScript-related exceptions that occur because either a graph or node's function is malformed."""
     def __init__(self, message):
         super().__init__(message)
 
-class InvalidCritScriptFunctionException(CritScriptException):
-    def __init__(self, function):
-        super().__init__(f"{function} must return a list of outputs, but does not.")
+class ValueDoesNotExistYet(CritScriptException):
+    """Occurs when a "just-in-time" node cannot access a value it needs, because the source node:
+
+    * is not a "just-in-time" node, AND
+    * has not run yet."""
+    def __init__(self, function, parameter):
+        super().__init__(f"{function} failed to get value for input pin = {parameter} because it either does not exist yet, or is not connected.")
+
+class ValueIsNotConnected(CritScriptException):
+    """Occurs when a needed value is not connected, AND does not contain a magic number."""
+    def __init__(self, function, parameter):
+        raise NotImplementedError()
 
 class CritScriptPin:
     def __init__(self, name:str="unnamed", node:'CritScriptNode|None'=None, conducted_type:type|None=None, out:bool=False):
@@ -149,9 +159,10 @@ class ValuePin(CritScriptPin):
 class ExecutionPin(CritScriptPin):
     def __init__(self, index:int=0, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.index = index
 
     @classmethod
-    def from_prototype(cls, node:'CritScriptNode', out:bool, prototype:'str|CritScriptPinPrototype') -> 'ExecutionPin':
+    def from_prototype(cls, node:'CritScriptNode', out:bool, prototype:'str|CritScriptPinPrototype', index:int=0) -> 'ExecutionPin':
         # String-based prototype
         if isinstance(prototype, str):
             return ExecutionPin(
@@ -159,6 +170,7 @@ class ExecutionPin(CritScriptPin):
                 name=prototype,
                 node=node,
                 out=out,
+                index=index,
             )
         # CritScriptPinPrototype-based prototype
         if prototype.conducted_type is not None:
@@ -229,11 +241,11 @@ class CritScriptNode:
                 self.exec_out_pins = list((ExecutionPin.from_prototype(self, _OUT, "exec-out"),))
             case NodeType.Macro:
                 self.exec_in_pins  = (
-                    list([ExecutionPin.from_prototype(self,  _IN, prototype) for prototype in entry.exec_inputs])
+                    list([ExecutionPin.from_prototype(self,  _IN, prototype, index) for index, prototype in enumerate(entry.exec_inputs)])
                         if entry.exec_inputs is not None else
                     list((ExecutionPin.from_prototype(self,  _IN,  "exec-in"),)))
                 self.exec_out_pins = (
-                    list([ExecutionPin.from_prototype(self, _OUT, prototype) for prototype in entry.exec_outputs])
+                    list([ExecutionPin.from_prototype(self, _OUT, prototype, index) for index, prototype in enumerate(entry.exec_outputs)])
                         if entry.exec_outputs is not None else
                     list((ExecutionPin.from_prototype(self, _OUT, "exec-out"),)))
             case _:
@@ -260,6 +272,7 @@ class CritScriptNode:
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         pin_args = [pin.read_value() for pin in self.in_pins]
         try:
+            print(f"PIN ARGS: {pin_args}")  # TODO debug
             result = self.function(
                 node_ctx=node_ctx,  # node context
                 *pin_args,          # pin arguments
@@ -289,7 +302,7 @@ class CritScriptNode:
         ## SELECT OUTGOING EXECUTION PIN
         # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
         if self.node_type is NodeType.Macro:
-            exec_out_index = node.exec_out_index        # Macros write which execution pin to use to the node context
+            exec_out_index = node_ctx.exec_out_index        # Macros write which execution pin to use to the node context
             return self.exec_out_pins[exec_out_index]
         elif self.is_just_in_time_node():
             return None                                 # Just-In-Time nodes don't use execution pins.
@@ -301,10 +314,11 @@ class CritScriptNodeContext:
     """Access point for execution pin-related baggage inside of user functions, and an access point for node memory.
     Is always required as a parameter for @crit-script functions."""
 
-    def __init__(self, node:CritScriptNode, exec_in_index: int=0):
-        self._node:CritScriptNode
+    def __init__(self, node:CritScriptNode, debug:bool = False, exec_in_index: int=0):
+        self._node:CritScriptNode = node
         self.exec_in_index: int = exec_in_index
         self.exec_out_index: int = 0
+        self.debug = debug
 
     @property
     def memory(self) -> Any:
@@ -329,7 +343,8 @@ def can_run_graph(start_from:ExecutionPin|CritScriptNode):
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
             )
 
-def run_graph(start_from: ExecutionPin | CritScriptNode):
+def run_graph(start_from: ExecutionPin | CritScriptNode,
+              debug:bool = False,):
     """Runs a CritScript graph from the given node or execution pin."""
     start_pin:ExecutionPin
     if isinstance(start_from, CritScriptNode):
@@ -353,16 +368,20 @@ def run_graph(start_from: ExecutionPin | CritScriptNode):
             exec_in_pin = start_from
     else:
         ## Posts maintainer's contact information and each parameter. Note that more context is probably needed.
-        raise NotImplementedError(f"In CritScript, run() was not implemented for start_from with type={type(start_from)} with value={start_from}.\n"
-                                  f"{POST_MAINTAINER_CONTACT_INFORMATION}")     ## NOTE nothing should be able to do this.
+        raise NotImplementedError(
+            f"In CritScript, run_graph() was not implemented for start_from with type={type(start_from)} with value={start_from}.\n"
+            f"{POST_MAINTAINER_CONTACT_INFORMATION}")  ## NOTE nothing should be able to do this.
 
     ## NOTE in_pin is guaranteed to be an in-pin by now. This means we can start.
 
     ## EXECUTION LOOP
     while exec_in_pin:
-        CritScriptNodeContext(_node=exec_in_pin.node, ) # TODOTODOTODOTODO
-
-        exec_out_pin = exec_in_pin.node.invoke()
+        node_ctx = CritScriptNodeContext(
+            node=exec_in_pin.node,
+            exec_in_index=exec_in_pin.index,
+            debug = debug,
+        )
+        exec_out_pin = exec_in_pin.node.invoke(node_ctx)
         # advance to next in-pin, if available
         if exec_out_pin.has_friend():
             exec_in_pin = exec_out_pin.friend
@@ -435,7 +454,8 @@ def crit_script(
     def decorator(function):
         def wrapper(*sub_args, **sub_kwargs):
             return function(*sub_args, **sub_kwargs)
-        wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
+        # Ensures that decorated functions keep their names.
+        wrapper.__name__ = function.__name__
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
         _add_to_crit_script(wrapper, inputs, outputs, node_type, uses_own_node=uses_own_node, aliases=aliases)    # submits this function to CritScript
