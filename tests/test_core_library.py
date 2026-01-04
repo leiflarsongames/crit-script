@@ -10,19 +10,21 @@ _TRIAL_COUNT = 5000
 _ACCEPTABLE_DEVIATION_OF_MEAN = 0.02
 """The largest absolute deviation we will tolerate from the mean before failing a test, as a fraction of the expected mean."""
 
+_ERSATZ_CONTEXT = CritScriptNodeContext( CritScriptNode("ersatz-test-function") )
+
 @crit_script(
     outputs=(Pin(int, "value-out-0"),
              Pin(int, "value-out-1"),
              Pin(int, "value-out-2"))
     )
-def get_test_values(node_ctx):
+def get_test_values():
     """TODO remove this!"""
     ## TODO implement Magic Numbers! (constants)
     return 4, 6, 8
 
 @crit_script( inputs=(Pin(Any, "value-in")),
              outputs=(Pin(Any, "value-out")))
-def test_buffer(node_ctx, value_in) -> Any:
+def test_buffer(value_in) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):
@@ -45,6 +47,7 @@ class TestCoreLibrary(unittest.TestCase):
             non_treacherous_sentence,
             "long but otherwise straightforward identifiers work fine."
         )
+        ## TODO may need more in-depth strings for other character systems, like Hangul
 
     def test_unused_node(self):
         numbers_node = make_node(get_test_values)
@@ -54,10 +57,10 @@ class TestCoreLibrary(unittest.TestCase):
 
     def test_run_simple_graph(self):
         """Runs a small graph, and inspects the output on the other side."""
-        start_pin = ExecutionPin("program-start", out=True)
+        start_pin = ExecutionPin(0, "graph-start", out=True)
         node_0 = make_node(get_test_values)
         output_node = make_node(test_buffer)
-        self.assertTrue(start_pin.try_connect(node_0.exec_in_pins[0]), "connect on-program-start")
+        self.assertTrue(start_pin.try_connect(node_0.exec_in_pins[0]), "connect graph-start")
         self.assertTrue(node_0.out_pins[0].try_connect(output_node.in_pins[0]), "connect value line")
         ## check pin parity on last execution line
         self.assertTrue({node_0.exec_out_pins[0].out == True}, "node_0.exec_out_pins[0] is an out pin")
@@ -65,11 +68,11 @@ class TestCoreLibrary(unittest.TestCase):
         ## connect last execution line
         self.assertTrue({node_0.exec_out_pins[0].try_connect(output_node.exec_in_pins[0])}, "connect execution line")
         try:
-            ## run program
-            run_graph(start_pin)
+            ## run the connected graph, our "program"
+            run_graph(start_pin, True)
             self.assertEqual(output_node.read_all_out_pins()[0],
                              get_test_values()[0],
-                             "Program yields expected output")
+                             "Graph yields expected output")
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
@@ -83,7 +86,7 @@ class TestCoreLibrary(unittest.TestCase):
         self.assertTrue(numbers_node.out_pins[0].try_connect(buffer_node.in_pins[0]))
         try:
             run_graph(numbers_node)
-            self.assertEqual(numbers_node.read_all_out_pins()[0], get_test_values()[0], "Program yields expected output")
+            self.assertEqual(numbers_node.read_all_out_pins()[0], get_test_values(_ERSATZ_CONTEXT)[0], "Graph yields expected output")
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
@@ -191,7 +194,6 @@ class TestCoreLibrary(unittest.TestCase):
         run_graph(cr_node.exec_in_pins[1])    # reset
         self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
 
-    #
     # def test_modulo(self):          ## TODO
     #     raise NotImplementedError()
     #
@@ -206,7 +208,6 @@ class TestCoreLibrary(unittest.TestCase):
     #
     # def test_signal(self):          ## TODO
     #     raise NotImplementedError()
-
 
 
 if __name__ == '__main__':
