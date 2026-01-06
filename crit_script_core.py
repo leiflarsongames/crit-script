@@ -2,6 +2,8 @@ from random import randint, random
 from typing import Any
 from crit_script import crit_script, Pin, Exec, crit_script_macro
 
+## NOTE this should print once
+print("Thank you for using CritScript. Please send any questions or feedback to leiflarsongames@gmail.com!")
 
 @crit_script(inputs=(Pin(str, "message")))
 def debug_print(*inputs: str):

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Any, Iterable
 
+
+## TODO move this to a config file or something?
 POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarsongames@gmail.com"
 
 ALL_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
@@ -149,8 +151,13 @@ class ValuePin(CritScriptPin):
 
 
 class ExecutionPin(CritScriptPin):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, index:int=0, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._index:int = index
+
+    @property
+    def index(self) -> int:
+        return self._index
 
     @classmethod
     def from_prototype(cls, node:'CritScriptNode', out:bool, prototype:'str|CritScriptPinPrototype') -> 'ExecutionPin':
@@ -194,7 +201,6 @@ class CritScriptNodePrototype:
     outputs: list[CritScriptPinPrototype] | None = None
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
-
 
 class CritScriptNode:
     def __init__(self, function_name):
@@ -249,6 +255,8 @@ class CritScriptNode:
     def invoke(self, exec_in_index:int=0, debug=False) -> ExecutionPin | None:
         """Returns the out pin from this node, if it exists."""
 
+        node_context_object = CritScriptNodeContext(self, exec_in_index, debug)
+
         # NOTE: For CritScript users:
         #   If this type hint throws an error, make sure your function is returning a tuple with every data pin's value.
         #   If it's a macro, include the index of the execution out pin that's being used as the last value.
@@ -294,6 +302,29 @@ class CritScriptNode:
             return None
         else:
             return self.exec_out_pins[0]    # return the only exec-out pin.
+
+class CritScriptNodeContext:
+    def __init__(
+        self,
+        node: CritScriptNode,
+        exec_in_index: int = 0,
+        debug:bool = False):
+        self._node:CritScriptNode = node
+        self.exec_in_index:int = exec_in_index
+        self.exec_out_index:int = 0
+        self.debug:bool = debug
+
+    @property
+    def memory(self) -> Any:
+        return self._node.memory
+
+    @memory.setter
+    def memory(self, value:Any) -> None:
+        self._node.memory = value
+
+    def get_node(self):
+        """This is probably overkill for what you need, but if you really need access to the node here it is."""
+        return self._node
 
 
 ## CLASS-LESS FUNCTIONS
@@ -443,11 +474,6 @@ def crit_script_macro(
 def Pin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
     """Shorthand for prototyping a ValuePin of a given type and name. Used in ``@crit_script`` an ``@crit_script_macro`` parameters"""
     return CritScriptPinPrototype(type, name)
-
-# ## TODO implement bundle pins!
-# def MultiPin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
-#     """Shorthand for prototyping a MultiValuePin of a given type and name."""
-#     return CritScriptPinPrototype(type, name)
 
 def Exec(name: str = "exec-unnamed") -> str:
     """Shorthand for prototyping an ExecutionPin of a given name."""

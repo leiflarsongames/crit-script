@@ -174,6 +174,41 @@ class TestCoreLibrary(unittest.TestCase):
     def test_for_loop(self):
         raise NotImplementedError()
 
+    def test_count_and_reset(self): ## TODO
+        ## NOTE: outgoing execution pins not tested!
+        cr_node = make_node(count_and_reset)
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 0")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 1")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 2")
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 3")
+        run_graph(cr_node.exec_in_pins[1])    # reset
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 4")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 5")
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 6")
+        run_graph(cr_node.exec_in_pins[1])    # reset
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
+
+    # def test_modulo(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_negate(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_just_in_time_propagation(self):    ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_for_loop(self):        ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_signal(self):          ## TODO
+    #     raise NotImplementedError()
+
 if __name__ == '__main__':
     ## show all loaded functions
     print(f"keys = {', '.join(ALL_FUNCTIONS.keys())}")
