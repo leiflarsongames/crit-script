@@ -22,7 +22,7 @@ def get_test_values(ctx:NodeContext):
 
 @crit_script( inputs=(Pin(Any, "value-in")),
              outputs=(Pin(Any, "value-out")))
-def test_buffer(ctx:NodeContext, value_in) -> Any:
+def test_buffer(value_in, /, ctx:NodeContext) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):

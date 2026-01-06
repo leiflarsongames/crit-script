@@ -111,9 +111,6 @@ class ValuePin(CritScriptPin):
             out=out,
         )
 
-    def can_read_previous_pin_value(self):
-        return self.has_friend() and isinstance(self.friend, ValuePin)
-
     def read_value(self) -> Any:
         if self.node.is_just_in_time_node():
             raise NotImplementedError("\"just-in-time\" logic is not implemented!") # TODO implement just-in-time logic!
@@ -122,7 +119,8 @@ class ValuePin(CritScriptPin):
                 return self.last_value
             elif self.last_value is not None:
                 return self.last_value  ## If a value's been written in as a "magic number", read it.
-            elif self.can_read_previous_pin_value():
+            elif self.has_friend() and isinstance(self.friend, ValuePin):
+                # "if this in-pin can read the previous value, then..."
                 return self.friend.last_value
             else:
                 return None
@@ -136,13 +134,13 @@ class ValuePin(CritScriptPin):
             raise ValueError(
                 f"Cannot write a value of type={type(value)} to a pin which conducts type={self.conducted_type}!")
 
-    def has_magic_number(self):
-        return not self.out and self.last_value is not None
-
-    def can_add_magic_number(self):
-        return not self.out and self.last_value is None
-
-    can_edit_magic_number = has_magic_number
+    # def has_magic_number(self):
+    #     return not self.out and self.last_value is not None
+    #
+    # def can_add_magic_number(self):
+    #     return not self.out and self.last_value is None
+    #
+    # can_edit_magic_number = has_magic_number
 
 
 class ExecutionPin(CritScriptPin):
@@ -250,12 +248,14 @@ class Node:
         result:Any
 
         node_context_object = NodeContext(self, exec_in_index, debug)
+        keyword_arguments = dict()
+        keyword_arguments["ctx"] = node_context_object
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         try:
             result = self.function(
-                ctx = node_context_object,                      # Node context object
-                *[pin.read_value() for pin in self.in_pins])    # Pin arguments
+                *[pin.read_value() for pin in self.in_pins],    # Pin arguments
+                keyword_arguments)                              # Node context object
         except Exception as e:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
@@ -396,6 +396,7 @@ def _make_iterable(obj:Any) -> Iterable:
         return (obj,)  # single element tuple
     return obj         # no change made to iterable
 
+# TODO enable scalable parameter counts
 def crit_script(
         # un-normalized user inputs
         inputs: Iterable[PinPrototype] | PinPrototype | None = None,
@@ -419,6 +420,7 @@ def crit_script(
         return wrapper
     return decorator
 
+# TODO enable scalable parameter counts
 def crit_script_macro(
         # un-normalized user inputs
         inputs: Iterable[PinPrototype] | PinPrototype | None=None,

@@ -98,3 +98,4 @@ def switch_compare(ctx:NodeContext, a, b) -> None:
         ctx.exec_out_index = 0
     else:
         ctx.exec_out_index = 0
+
