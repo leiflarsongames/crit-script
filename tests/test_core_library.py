@@ -27,6 +27,8 @@ def test_buffer(value_in, /, ctx:NodeContext) -> Any:
 
 class TestCoreLibrary(unittest.TestCase):
 
+    ## TODO rewrite a test or something! This isn't working for now.
+
     def test_decorator_shorthand_exec(self):
         for variation in range(_DETERMINISTIC_VARIATION_COUNT):
             self.assertEqual(

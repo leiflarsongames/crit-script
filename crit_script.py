@@ -248,14 +248,14 @@ class Node:
         result:Any
 
         node_context_object = NodeContext(self, exec_in_index, debug)
-        keyword_arguments = dict()
-        keyword_arguments["ctx"] = node_context_object
+        kwargs = dict()
+        kwargs["ctx"] = node_context_object
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         try:
             result = self.function(
                 *[pin.read_value() for pin in self.in_pins],    # Pin arguments
-                keyword_arguments)                              # Node context object
+                **kwargs)                              # Node context object
         except Exception as e:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
