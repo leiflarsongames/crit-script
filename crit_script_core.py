@@ -1,18 +1,18 @@
 from random import randint, random
 from typing import Any
-from crit_script import crit_script, Pin, Exec, crit_script_macro
+from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext
 
 ## NOTE this should print once
 print("Thank you for using CritScript. Please send any questions or feedback to leiflarsongames@gmail.com!")
 
 @crit_script(inputs=(Pin(str, "message")))
-def debug_print(*inputs: str):
+def debug_print(ctx, *inputs: str):
     """Prints a ``message`` to the underlying Python console."""
     print(*inputs)
 
 
 @crit_script()
-def reroute_execution() -> None:
+def reroute_execution(ctx) -> None:
     """Does nothing. Used for redirecting an execution line."""
     pass
 
@@ -25,7 +25,7 @@ def reroute_execution() -> None:
              Pin(float, "value-out-1"),
              Pin(float, "value-out-2"))
 )
-def sort_ascending(*args: Any) -> list:
+def sort_ascending(ctx, *args: Any) -> list:
     """Outputs each input in order with the lowest at the top, and the highest at the bottom."""
     rv = list(*args)
     rv.sort()
@@ -36,13 +36,13 @@ def sort_ascending(*args: Any) -> list:
     inputs=(Pin(int, "die-type")),
     outputs=(Pin(float, "result"))
 )
-def roll_die(die_type: int) -> int:
+def roll_die(ctx, die_type: int) -> int:
     """Rolls a ``die-type``-sided die."""
     return randint(1, die_type)
 
 
 @crit_script(outputs=(Pin(float, "result")))
-def roll_percent() -> float:
+def roll_percent(ctx) -> float:
     """Returns a random number from 0 to 1, not including 1.
 
     That is, ``result`` will be a random number on the interval [0,1)."""
@@ -58,7 +58,7 @@ def roll_percent() -> float:
              Pin(int, "E"),)),
     outputs=(Pin(int, "result"))
 )
-def roll_dice_parameterized_expression(dice_algebra_expression: str, *params: int):
+def roll_dice_parameterized_expression(ctx, dice_algebra_expression: str, *params: int):
     """TODO test this!"""
     from dice_algebra_expression import Expression
     return Expression(dice_algebra_expression,
@@ -76,7 +76,7 @@ def roll_dice_parameterized_expression(dice_algebra_expression: str, *params: in
     inputs=Pin(str, "dice-algebra-expression"),
     outputs=Pin(int, "result")
 )
-def roll_dice_expression(dice_algebra_expression: str):
+def roll_dice_expression(ctx, dice_algebra_expression: str):
     """TODO test this!"""
     from dice_algebra_expression import Expression
     return Expression(dice_algebra_expression).evaluate()
@@ -91,10 +91,10 @@ def roll_dice_expression(dice_algebra_expression: str):
                   Exec("a=b"),
                   Exec("a>b"))
 )
-def switch_compare(a, b, exec_in_index:int) -> int:
+def switch_compare(ctx:NodeContext, a, b) -> None:
     if a < b:
-        return 0
+        ctx.exec_out_index = 0
     elif a == b:
-        return 1
+        ctx.exec_out_index = 0
     else:
-        return 2
+        ctx.exec_out_index = 0

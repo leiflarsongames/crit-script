@@ -1,6 +1,6 @@
 import unittest
 
-from crit_script import crit_script, Pin, CritScriptNode, make_node, run_graph, ExecutionPin, ALL_FUNCTIONS
+from crit_script import crit_script, Pin, Node, make_node, run_graph, ExecutionPin, ALL_FUNCTIONS, NodeContext
 from crit_script_core import *
 
 _DETERMINISTIC_VARIATION_COUNT = 15
@@ -15,14 +15,14 @@ _ACCEPTABLE_DEVIATION_OF_MEAN = 0.02
              Pin(int, "value-out-1"),
              Pin(int, "value-out-2"))
     )
-def get_test_values():
+def get_test_values(ctx:NodeContext):
     """TODO remove this!"""
     ## TODO implement Magic Numbers! (constants)
     return 4, 6, 8
 
 @crit_script( inputs=(Pin(Any, "value-in")),
              outputs=(Pin(Any, "value-out")))
-def test_buffer(value_in) -> Any:
+def test_buffer(ctx:NodeContext, value_in) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):
