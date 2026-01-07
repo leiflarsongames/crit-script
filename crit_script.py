@@ -199,7 +199,6 @@ class CritScriptNodePrototype:
 class CritScriptNode:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
-        self.node_memory:Any = None    # used by functions with state to store whatever they want here.
         entry = ALL_FUNCTIONS[_calc_func_identifier(function_name)]
 
         # default values
@@ -209,10 +208,8 @@ class CritScriptNode:
         self.exec_in_pins:list[ExecutionPin] = list()
         self.exec_out_pins:list[ExecutionPin] = list()
 
-
         # CREATE VALUES
         self.function: Callable = entry.function
-        self.uses_node_memory:bool = uses_node_memory
 
         # Create data pins
         self.node_type = entry.node_type if entry.node_type is not None else NodeType.Standard
