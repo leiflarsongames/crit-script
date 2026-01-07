@@ -13,8 +13,8 @@ _ACCEPTABLE_DEVIATION_OF_MEAN = 0.02
 TEST_VALUES = (4, 6, 8)
 TEST_VALUE = 42
 
-@crit_script( inputs=(Pin(Any, "value-in")),
-             outputs=(Pin(Any, "value-out")))
+@crit_script( inputs=(Pin("value-in", Any)),
+             outputs=(Pin("value-out", Any)))
 def test_buffer(ctx:NodeContext, value_in:Any) -> Any:
     return value_in
 
