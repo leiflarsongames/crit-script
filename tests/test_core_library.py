@@ -189,8 +189,9 @@ class TestCoreLibrary(unittest.TestCase):
         run_graph(cr_node.exec_in_pins[1])    # reset
         self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
 
-
-
+    # def test_wake_up(self):         ## TODO
+    #     raise NotImplementedError()
+    #
     # def test_modulo(self):          ## TODO
     #     raise NotImplementedError()
     #
