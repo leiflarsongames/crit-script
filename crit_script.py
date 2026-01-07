@@ -10,8 +10,6 @@ ALL_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
 _IN = False
 _OUT = True
 
-_NODE_CONTEXT_PARAMETER_NAME = "node_ctx"
-
 class NodeType(Enum):
     JustInTime = 0
     """This node will only be executed "just-in-time", and will not include any execution pins."""
@@ -275,7 +273,6 @@ class CritScriptNode:
         pin_args = [pin.read_value() for pin in self.in_pins]
         try:
             print(f"PIN ARGS: {pin_args}")  # TODO debug
-            print(f"NODE CTX: {node_ctx}")  # TODO debug
             result = self.function(
                 node_ctx=node_ctx,  # node context
                 *pin_args,          # pin arguments
@@ -337,14 +334,14 @@ class CritScriptNodeContext:
         * Note: this function is usually overkill for what you need. See the other functions/properties available to ``CritScriptNodeContext`` before deciding that ``get_node()`` is what you need."""
         return self._node
 
+
 ## CLASS-LESS FUNCTIONS
 
 def can_run_graph(start_from:ExecutionPin|CritScriptNode):
-    """Whether ``run_graph`` can begin running from this node or execution pin. For use in UI only."""
+    """Whether ``run_graph`` can begin running from this node or execution pin."""
     return (not (isinstance(start_from, CritScriptNode) and start_from.is_just_in_time_node()) and
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
             )
-    ## TODO test that this is fully in-line with run_graph()'s actual needs.
 
 def run_graph(start_from: ExecutionPin | CritScriptNode,
               debug:bool = False,):
@@ -381,8 +378,8 @@ def run_graph(start_from: ExecutionPin | CritScriptNode,
     while exec_in_pin:
         node_ctx = CritScriptNodeContext(
             node=exec_in_pin.node,
-            debug=debug,
             exec_in_index=exec_in_pin.index,
+            debug = debug,
         )
         exec_out_pin = exec_in_pin.node.invoke(node_ctx)
         # advance to next in-pin, if available
@@ -456,11 +453,7 @@ def crit_script(
 
     def decorator(function):
         def wrapper(*sub_args, **sub_kwargs):
-            print(f"sub_args = {sub_args}")     # TODO debug
-            print(f"sub_kwargs = {sub_kwargs}") # TODO debug
-            node_ctx = sub_kwargs.pop("node_ctx")   # An error here indicates a mistake with node context?
-            return function(node_ctx, *sub_args, **sub_kwargs)
-            ## return function(*sub_args, **sub_kwargs)     ## TODO remove!
+            return function(*sub_args, **sub_kwargs)
         # Ensures that decorated functions keep their names.
         wrapper.__name__ = function.__name__
         wrapper.__qualname__ = function.__qualname__
