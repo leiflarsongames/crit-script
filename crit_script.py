@@ -266,7 +266,14 @@ class Node:
         kwargs = dict()
         kwargs["ctx"] = node_context_object
 
-        self.summon_values()    # Only for "just-in-time" nodes.
+        if not self.is_just_in_time_node():
+            # for all in-pins attached to just-in-time nodes, do the just-in-time logic for those nodes!
+            for in_pin in self.in_pins:
+                if (in_pin.friend is not None and
+                    in_pin.friend.node is not None and
+                    in_pin.friend.node.is_just_in_time_node()
+                    ):
+                    in_pin.friend.node.summon_values()    # Only for "just-in-time" nodes.
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         try:
