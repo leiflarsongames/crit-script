@@ -1,6 +1,7 @@
 from random import randint, random
 from typing import Any
-from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext
+from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext, wake_up
+
 
 @crit_script(inputs=(Pin('message', str)))
 def debug_print(ctx, *inputs: str):
@@ -58,11 +59,10 @@ def make_keyword_parameters(ctx, keys:list[str], values:list[Any]) -> dict[str, 
         kwd_params[keys[i]] = values[i]
     return kwd_params
 
-
-    # to all you purists listen I too hate parallel arrays, but I'm NOT gonna be pushing that on people who don't do
-    # CS. There's a reason parallel arrays are the second thing people do with arrays in school, because it's dead
-    # simple. I'm enabling it because people are going to think to do it that way, and I don't need them worrying about
-    # the 'right' way to do something that should obviously work fine.
+    # To all you purists: Listen. I, too, hate parallel arrays, but I'm NOT gonna be pushing that on people who don't
+    # usually do CS. There's a reason parallel arrays are the second thing people do with arrays in school, because
+    # it's dead simple. I'm enabling it because people are going to think to do it that way, and I don't need them
+    # worrying about the 'right' way to do something that should obviously work fine.
 
 @crit_script(
     inputs=Pin('dice-algebra-expression', str),
@@ -155,15 +155,8 @@ def count_and_reset(ctx:NodeContext) -> int:
             ctx.memory += 1
     return ctx.memory
 
-# @wake_up(count_and_reset) # TODO this seems like a more reasonable way to do it.
-# def wake_up_count_and_reset(ctx:NodeContext) -> int:
-#     if ctx.memory is None:
-#         ctx.memory = 0
-#     return ctx.memory
-#
-# ## TODO implement wake_up for some nodes so that I don't need a "do-nothing" pin to prep a node for use!!! This will allow it to participate (somewhat) in just-in-time logic!
-# @count_and_reset.wake_up    # is this possible to create? Doesn't look like it...
-# def count_and_reset(ctx:NodeContext) -> int:
-#     if ctx.memory is None:
-#         ctx.memory = 0
-#     return ctx.memory
+@wake_up(count_and_reset)
+def wake_up_count_and_reset(ctx:NodeContext) -> int:
+    if ctx.memory is None:
+        ctx.memory = 0
+    return ctx.memory
