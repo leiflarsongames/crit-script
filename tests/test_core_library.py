@@ -1,6 +1,6 @@
 import unittest
 
-from crit_script import crit_script, Pin, CritScriptNode, make_node, run_graph, ExecutionPin, ALL_FUNCTIONS
+from crit_script import crit_script, Pin, Node, make_node, run_graph, ExecutionPin, ALL_FUNCTIONS, NodeContext
 from crit_script_core import *
 
 _DETERMINISTIC_VARIATION_COUNT = 15
@@ -10,22 +10,17 @@ _TRIAL_COUNT = 5000
 _ACCEPTABLE_DEVIATION_OF_MEAN = 0.02
 """The largest absolute deviation we will tolerate from the mean before failing a test, as a fraction of the expected mean."""
 
-@crit_script(
-    outputs=(Pin(int, "value-out-0"),
-             Pin(int, "value-out-1"),
-             Pin(int, "value-out-2"))
-    )
-def get_test_values():
-    """TODO remove this!"""
-    ## TODO implement Magic Numbers! (constants)
-    return 4, 6, 8
+TEST_VALUES = (4, 6, 8)
+TEST_VALUE = 42
 
 @crit_script( inputs=(Pin(Any, "value-in")),
              outputs=(Pin(Any, "value-out")))
-def test_buffer(value_in) -> Any:
+def test_buffer(ctx:NodeContext, value_in:Any) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):
+
+    ## TODO rewrite a test or something! This isn't working for now.
 
     def test_decorator_shorthand_exec(self):
         for variation in range(_DETERMINISTIC_VARIATION_COUNT):
@@ -47,14 +42,16 @@ class TestCoreLibrary(unittest.TestCase):
         )
 
     def test_unused_node(self):
-        numbers_node = make_node(get_test_values)
-        for idx in range(3):
-            self.assertEqual(numbers_node.read_all_out_pins()[idx], None, "Unevaluated nodes should have no output available!")
+        number_node = make_node(roll_percent)
+        buffer_node = make_node(test_buffer)
+        self.assertEqual(number_node.read_all_out_pins()[0], None, "(1/2) Unevaluated nodes should have no output available!")
+        self.assertEqual(buffer_node.read_all_out_pins()[0], None, "(2/2) Unevaluated nodes should have no output available!")
 
     def test_run_simple_graph(self):
         """Runs a small graph, and inspects the output on the other side."""
         start_pin = ExecutionPin("program-start", out=True)
-        node_0 = make_node(get_test_values)
+        node_0 = make_node(test_buffer)
+        node_0.in_pins[0].write_value(TEST_VALUE)
         output_node = make_node(test_buffer)
         self.assertTrue(start_pin.try_connect(node_0.exec_in_pins[0]), "connect on-program-start")
         self.assertTrue(node_0.out_pins[0].try_connect(output_node.in_pins[0]), "connect value line")
@@ -67,13 +64,14 @@ class TestCoreLibrary(unittest.TestCase):
             ## run program
             run_graph(start_pin)
             self.assertEqual(output_node.read_all_out_pins()[0],
-                             get_test_values()[0],
+                             TEST_VALUE,
                              "Program yields expected output")
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
     def test_reroute(self):
-        numbers_node = make_node(get_test_values)
+        numbers_node = make_node(test_buffer)
+        numbers_node.in_pins[0].write_value(TEST_VALUE)
         reroute_node = make_node(reroute_execution)
         buffer_node  = make_node(test_buffer)
         ## connect everything
@@ -82,7 +80,7 @@ class TestCoreLibrary(unittest.TestCase):
         self.assertTrue(numbers_node.out_pins[0].try_connect(buffer_node.in_pins[0]))
         try:
             run_graph(numbers_node)
-            self.assertEqual(numbers_node.read_all_out_pins()[0], get_test_values()[0], "Program yields expected output")
+            self.assertEqual(numbers_node.read_all_out_pins()[0], TEST_VALUE, "Program yields expected output")
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
@@ -101,7 +99,7 @@ class TestCoreLibrary(unittest.TestCase):
         self.assertEqual(len(output_node.in_pins), 1, "has one such pin")
         ## connect everything
         self.assertTrue(random_node.exec_out_pins[0].try_connect(output_node.exec_in_pins[0]), "Connecting execution line")
-        self.assertTrue(random_node.out_pins[0].try_connect(output_node.in_pins[0]), "Connecting data line")
+        self.assertTrue(random_node.out_pins[0].try_connect(output_node.in_pins[0]), "Connecting value line")
 
         try:
             accum = 0
@@ -173,6 +171,41 @@ class TestCoreLibrary(unittest.TestCase):
 
     def test_for_loop(self):
         raise NotImplementedError()
+
+    def test_count_and_reset(self): ## TODO
+        ## NOTE: outgoing execution pins not tested!
+        cr_node = make_node(count_and_reset)
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 0")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 1")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 2")
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 3")
+        run_graph(cr_node.exec_in_pins[1])    # reset
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 4")
+        run_graph(cr_node.exec_in_pins[2])    # add-one
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 5")
+        run_graph(cr_node.exec_in_pins[0])    # exec-in
+        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 6")
+        run_graph(cr_node.exec_in_pins[1])    # reset
+        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
+
+    # def test_modulo(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_negate(self):          ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_just_in_time_propagation(self):    ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_for_loop(self):        ## TODO
+    #     raise NotImplementedError()
+    #
+    # def test_signal(self):          ## TODO
+    #     raise NotImplementedError()
 
 if __name__ == '__main__':
     ## show all loaded functions
