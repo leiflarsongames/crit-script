@@ -124,7 +124,7 @@ class ValuePin(CritScriptPin):
             elif self.last_value is not None:
                 return self.last_value  ## If a value's been written in as a "magic number", read it.
             elif self.can_read_previous_pin_value():
-                return self.friend.last_value   ## TODO this can throw an error... Make sure attachment is prevented that would cause this to connect to an Execution line or something!
+                return self.friend.last_value
             else:
                 return None
 
@@ -193,7 +193,6 @@ class CritScriptNodePrototype:
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
     uses_own_node:bool = False
-    aliases:list[str] | None = None
 
 class CritScriptNode:
     def __init__(self, function_name):
@@ -248,8 +247,8 @@ class CritScriptNode:
         execution pin input before it's used."""
         return len(self.exec_in_pins) == 0
 
-    def invoke(self, node_ctx:'CritScriptNodeContext') -> ExecutionPin | None:
-        """Runs the internal function with the given context, and returns the exec-out pin, if it exists."""
+    def invoke(self, exec_in_index:int=0, debug=False) -> ExecutionPin | None:
+        """Returns the out pin from this node, if it exists."""
 
         # NOTE: For CritScript users:
         #   If this type hint throws an error, make sure your function is returning a tuple with every data pin's value.
@@ -258,17 +257,21 @@ class CritScriptNode:
         result:Any
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
+        ## build the arguments list
+        kwargs = dict()
         pin_args = [pin.read_value() for pin in self.in_pins]
+        if self.node_type is NodeType.Macro:
+            kwargs["exec_in_index"] = exec_in_index
+        if self.uses_own_node:
+            kwargs["node"] = self
+        ## actually call the internal function
         try:
-            result = self.function(
-                node_ctx=node_ctx,  # node context
-                *pin_args,          # pin arguments
-            )
+            result = self.function(*pin_args, **kwargs)
         except Exception as e:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
         finally:
-            if node_ctx.debug:
+            if debug:
                 print(f"Invoked {self.function.__qualname__}")
 
         ## ensure result is iterable
@@ -280,7 +283,8 @@ class CritScriptNode:
             result = (result,)
 
         # UPDATE OUTGOING VALUE PINS
-        for index, result_value in enumerate(result):
+        values = result[0:-1] if self.node_type is NodeType.Macro else result
+        for index, result_value in enumerate(values):
             # NOTE: If this throws an error, it's probably because there's a mismatch between the values leaving the
             # wrapped function, and the values the node is configured to actually output.
             # TODO add an exception here for cases where that happens so we can explain that to the user!
@@ -289,22 +293,20 @@ class CritScriptNode:
         ## SELECT OUTGOING EXECUTION PIN
         # If there is perhaps more than one outgoing execution pin, pull which one to use from the result!
         if self.node_type is NodeType.Macro:
-            exec_out_index = node.exec_out_index        # Macros write which execution pin to use to the node context
+            exec_out_index = result[-1]     # Macros write which execution pin to use in the last position of their returned list.
             return self.exec_out_pins[exec_out_index]
         elif self.is_just_in_time_node():
-            return None                                 # Just-In-Time nodes don't use execution pins.
+            return None
         else:
             return self.exec_out_pins[0]    # return the only exec-out pin.
 
-
+@dataclass
 class CritScriptNodeContext:
     """Access point for execution pin-related baggage inside of user functions, and an access point for node memory.
     Is always required as a parameter for @crit-script functions."""
-
-    def __init__(self, node:CritScriptNode, exec_in_index: int=0):
-        self._node:CritScriptNode
-        self.exec_in_index: int = exec_in_index
-        self.exec_out_index: int = 0
+    _node:CritScriptNode
+    exec_in_index: int = 0
+    exec_out_index: int = 0
 
     @property
     def memory(self) -> Any:
@@ -360,9 +362,8 @@ def run_graph(start_from: ExecutionPin | CritScriptNode):
 
     ## EXECUTION LOOP
     while exec_in_pin:
-        CritScriptNodeContext(_node=exec_in_pin.node, ) # TODOTODOTODOTODO
-
-        exec_out_pin = exec_in_pin.node.invoke()
+        CritScriptNodeContext(_node=node, ) # TODOTODOTODOTODO
+        exec_out_pin = exec_in_pin.node.invoke(exec_in_pin)
         # advance to next in-pin, if available
         if exec_out_pin.has_friend():
             exec_in_pin = exec_out_pin.friend
@@ -384,10 +385,7 @@ def _add_to_crit_script(
         exec_inputs:Iterable[str|CritScriptPinPrototype]|None = None,
         exec_outputs:Iterable[str|CritScriptPinPrototype]|None = None,
         uses_own_node:bool = False,
-        aliases:Iterable[str] | None = None,
     ):
-    if isinstance(aliases, tuple):
-        aliases = list(inputs)
     if isinstance(inputs, tuple):
         inputs = list(inputs)
     if isinstance(outputs, tuple):
@@ -398,9 +396,9 @@ def _add_to_crit_script(
             exec_inputs = list("exec-in")
         if exec_outputs is None:
             exec_outputs = list("exec-out")
-        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, uses_own_node=uses_own_node, aliases=aliases)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, uses_own_node=uses_own_node)
     else:
-        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, uses_own_node=uses_own_node, aliases=aliases)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, uses_own_node=uses_own_node)
 
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
@@ -413,12 +411,10 @@ def crit_script(
         outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
         just_in_time_node:bool = False,
         uses_own_node: bool = False,
-        aliases: Iterable[str] | str | None = None,
     ):
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
     ## Normalize inputs to be iterable
-
     if inputs is None:
         inputs = tuple()
     elif not isinstance(inputs, Iterable):
@@ -427,18 +423,13 @@ def crit_script(
         outputs = tuple()
     elif not isinstance(outputs, Iterable):
         outputs = (outputs,)
-    if aliases is None:
-        aliases = tuple()
-    elif not isinstance(aliases, Iterable):
-        aliases = (aliases,)
-
     def decorator(function):
         def wrapper(*sub_args, **sub_kwargs):
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
-        _add_to_crit_script(wrapper, inputs, outputs, node_type, uses_own_node=uses_own_node, aliases=aliases)    # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, node_type, uses_own_node=uses_own_node)    # submits this function to CritScript
         return wrapper
     return decorator
 
@@ -448,7 +439,6 @@ def crit_script_macro(
         exec_inputs:  Iterable[str] | str | None = None,
         exec_outputs: Iterable[str] | str | None = None,
         uses_own_node: bool = False,
-        aliases:str|list[str] = list(),
     ):
     """Function decorator for any CritScript function that will become a macro.
     TODO document the return types and parameters here with examples!"""
@@ -470,16 +460,12 @@ def crit_script_macro(
         exec_outputs = tuple()
     elif not isinstance(exec_outputs, Iterable):
         exec_outputs = (exec_outputs,)
-    if aliases is None:
-        aliases = tuple()
-    elif not isinstance(aliases, Iterable):
-        aliases = (aliases,)
     def decorator(function):
         def wrapper(*sub_args, **sub_kwargs):
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
-        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, uses_own_node=uses_own_node, aliases=aliases) # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, uses_own_node=uses_own_node) # submits this function to CritScript
         return wrapper
     return decorator
 

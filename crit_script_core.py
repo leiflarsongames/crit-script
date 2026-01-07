@@ -2,14 +2,6 @@ from random import randint, random
 from typing import Any
 from crit_script import crit_script, Pin, Exec, crit_script_macro, CritScriptNode, CritScriptNodeContext
 
-# TODO string manipulations
-# TODO math
-# TODO save/load JSON
-# TODO accept events from Python
-#
-
-# square-root ("sqrt")
-# nth-root ("radical")
 
 @crit_script(inputs=(Pin(str, "message")))
 def debug_print(node:CritScriptNodeContext, *inputs: str):
