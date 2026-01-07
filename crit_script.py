@@ -238,6 +238,21 @@ class Node:
         execution pin input before it's used."""
         return len(self.exec_in_pins) == 0
 
+    def summon_values(self):
+        if not self.is_just_in_time_node():
+            return
+        for in_pin in self.in_pins:
+            if in_pin.has_friend() and in_pin.friend.node.is_just_in_time_node():
+                in_pin.friend.node.invoke()
+            else:
+                msg_added:str = ' because a node was not attached to that pin and it did not have a magic number!'
+                if in_pin.has_friend() and in_pin.friend.node is not None:
+                    msg_added = (f' because the connected {sanitize_identifier(self.function)} failed to give a '
+                                 f'value for its pin "{in_pin.friend.name}" when invoked just-in-time!')
+                raise CritScriptException(
+                    f'"just-in-time" node {sanitize_identifier(self.function)} failed to summon needed value from '
+                    f'value pin "{in_pin.name}"' + msg_added)
+
     def invoke(self, exec_in_index:int=0, debug=False) -> ExecutionPin | None:
         """Returns the out pin from this node, if it exists."""
 
@@ -250,6 +265,8 @@ class Node:
         node_context_object = NodeContext(self, exec_in_index, debug)
         kwargs = dict()
         kwargs["ctx"] = node_context_object
+
+        self.summon_values()    # Only for "just-in-time" nodes.
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         try:
