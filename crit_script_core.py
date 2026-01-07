@@ -34,7 +34,6 @@ def sort_ascending(ctx, *args: Any) -> list:
     rv.sort()
     return rv
 
-
 @crit_script(
     inputs=(Pin(int, "die-type")),
     outputs=(Pin(float, "result"))
@@ -43,7 +42,6 @@ def roll_die(ctx, die_type: int) -> int:
     """Rolls a ``die-type``-sided die."""
     return randint(1, die_type)
 
-
 @crit_script(outputs=(Pin(float, "result")))
 def roll_percent(ctx) -> float:
     """Returns a random number from 0 to 1, not including 1.
@@ -51,29 +49,21 @@ def roll_percent(ctx) -> float:
     That is, ``result`` will be a random number on the interval [0,1)."""
     return random()
 
+@crit_script(inputs=(Pin(list[str], "keys"),
+                     Pin(list[Any], "values")),
+             outputs=Pin(dict[str, Any], "keyword-parameters"),
+             aliases="make-dictionary")
+def make_keyword_parameters(ctx, keys:list[str], values:list[Any]) -> dict[str, Any]:
+    kwd_params = dict()
+    for i in range(0, len(keys)):
+        kwd_params[keys[i]] = values[i]
+    return kwd_params
 
-@crit_script(
-    inputs=((Pin(str, "dice-algebra-expression"),
-             Pin(int, "A"),
-             Pin(int, "B"),
-             Pin(int, "C"),
-             Pin(int, "D"),
-             Pin(int, "E"),)),
-    outputs=(Pin(int, "result"))
-)
-def roll_dice_parameterized_expression(ctx, dice_algebra_expression: str, *params: int):
-    """TODO test this!"""
-    from dice_algebra_expression import Expression
-    return Expression(dice_algebra_expression,
-                      {
-                          'A': params[0],
-                          'B': params[1],
-                          'C': params[2],
-                          'D': params[3],
-                          'E': params[4],
-                      }
-                      ).evaluate()
 
+    # to all you purists listen I too hate parallel arrays but I'm NOT gonna be pushing that on people who don't do
+    # CS. There's a reason parallel arrays are the second thing people do with arrays in school, because it's dead
+    # simple. I'm enabling it because people are going to think to do it that way, and I don't need them worrying about
+    # the "right" way to do something that should obviously work fine.
 
 @crit_script(
     inputs=Pin(str, "dice-algebra-expression"),
@@ -84,6 +74,24 @@ def roll_dice_expression(ctx, dice_algebra_expression: str):
     from dice_algebra_expression import Expression
     return Expression(dice_algebra_expression).evaluate()
 
+# TODO implement list handling for that crap!
+@crit_script(
+    inputs=((Pin(str, "dice-algebra-expression"),
+             Pin(list[str], "parameter-names"),
+             Pin(list[int], "parameter-values"),
+             )),
+    outputs=(Pin(int, "result"))
+)
+def roll_dice_parameterized_expression(
+    ctx,
+    dice_algebra_expression: str,
+    parameters: dict[str, int],
+):
+    """TODO test this!"""
+    from dice_algebra_expression import Expression
+
+    ## construct parameters dictionary for the expression
+    return Expression(dice_algebra_expression, parameters).evaluate()
 
 @crit_script_macro(
     inputs=(Pin(float, "a"),
