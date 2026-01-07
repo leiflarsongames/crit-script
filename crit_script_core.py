@@ -1,21 +1,24 @@
+from itertools import product
 from random import randint, random
 from typing import Any
 from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext
 
-## NOTE this should print once
-print("Thank you for using CritScript. Please send any questions or feedback to leiflarsongames@gmail.com!")
-
 @crit_script(inputs=(Pin(str, "message")))
 def debug_print(ctx, *inputs: str):
     """Prints a ``message`` to the underlying Python console."""
-    print(*inputs)
-
+    print('\n'.join(*inputs))
 
 @crit_script()
 def reroute_execution(ctx) -> None:
     """Does nothing. Used for redirecting an execution line."""
     pass
 
+@crit_script(inputs="value-in",
+             outputs="value-out",
+             just_in_time_node=True)
+def reroute_value(ctx, value_in) -> Any:
+    """Does nothing. Used for redirecting a value line."""
+    return value_in
 
 @crit_script(
     inputs=(Pin(float, "value-in-0"),
@@ -91,11 +94,33 @@ def roll_dice_expression(ctx, dice_algebra_expression: str):
                   Exec("a=b"),
                   Exec("a>b"))
 )
+
 def switch_compare(ctx:NodeContext, a, b) -> None:
     if a < b:
         ctx.exec_out_index = 0
     elif a == b:
-        ctx.exec_out_index = 0
+        ctx.exec_out_index = 1
     else:
-        ctx.exec_out_index = 0
+        ctx.exec_out_index = 2
 
+
+@crit_script(
+    inputs=(Pin(int, "dividend"),
+            Pin(int, "divisor")),
+    outputs=Pin(int, "modulo"),
+    aliases="modulo",
+    just_in_time_node=True
+)
+def remainder(ctx, a, b) -> int:
+    """Returns the remainder of ``dividend``
+    divided by ``divisor``. Also known as
+    the "modulo" operator."""
+    return a % b
+
+@crit_script(
+    inputs=("addend-0", "addend-1"),
+    outputs="sum",
+    just_in_time_node=True
+)
+def add(a, b) -> float:
+    return a + b

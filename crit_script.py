@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Any, Iterable
 
+## NOTE this should print once
+print("Thank you for using CritScript. Please send any questions or feedback to leiflarsongames@gmail.com!")
 
 ## TODO move this to a config file or something? It'd be a TOML in Rust, not sure what to do here.
 ## Low priority for now, I like when people email me.
@@ -15,8 +17,6 @@ ALL_FUNCTIONS:dict[str, 'NodePrototype'] = dict()
 _IN = False
 _OUT = True
 
-
-
 class NodeType(Enum):
     JustInTime = 0
     """This node will only be executed "just-in-time", and will not include any execution pins."""
@@ -29,7 +29,7 @@ class NodeType(Enum):
     * Note: ``Macro`` is the only node type that allows manual addition of execution pins."""
     # External = -1   ## TODO implement!
     # """This node is an event which is callable from Python code. It may NOT have any inputs, and will include an
-    # exec-out output. May include data outputs."""
+    # exec-out output. May include value outputs."""
 
 
 class CritScriptException(Exception):
@@ -203,7 +203,7 @@ class Node:
         # CREATE VALUES
         self.function: Callable = entry.function
 
-        # Create data pins
+        # Create value pins
         self.node_type = entry.node_type if entry.node_type is not None else NodeType.Standard
         if entry.inputs is not None:
             self.in_pins = list([ValuePin.from_prototype(self, _IN, prototype) for prototype in entry.inputs])
@@ -230,7 +230,7 @@ class Node:
                 raise NotImplementedError(f"{Node.__init__} is not implemented for case node_type={self.node_type}!")
 
     def read_all_out_pins(self) -> list:
-        """Returns a list of all out pins' data. Primarily for testing."""
+        """Returns a list of all out pins' values. Primarily for testing."""
         return [pin.read_value() for pin in self.out_pins]
 
     def is_just_in_time_node(self) -> bool:
@@ -253,9 +253,15 @@ class Node:
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
         try:
+            # print(f"CALLING FUNCTION: {self.function.__qualname__} ----------------")                                                               # TODO is debug
+            # print(f'Args given:\n\t{'\n\t'.join((str(node_context_object), *[str(pin.read_value()) for pin in self.in_pins]))}')                    # TODO is debug
+            # print(f'Arg types given:\n\t{'\n\t'.join((str(type(node_context_object)), *[str(type(pin.read_value())) for pin in self.in_pins]))}')   # TODO is debug
             result = self.function(
+                node_context_object,                            # Node context object
                 *[pin.read_value() for pin in self.in_pins],    # Pin arguments
-                **kwargs)                              # Node context object
+                )
+            # print(f'Args received:\n\t{'\n\t'.join([str(elem) for elem in _make_iterable(result)])}')               # TODO is debug
+            # print(f'Arg types received:\n\t{'\n\t'.join([str(type(elem)) for elem in _make_iterable(result)])}')    # TODO is debug
         except Exception as e:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
@@ -399,10 +405,16 @@ def _make_iterable(obj:Any) -> Iterable:
 # TODO enable scalable parameter counts
 def crit_script(
         # un-normalized user inputs
-        inputs: Iterable[PinPrototype] | PinPrototype | None = None,
-        outputs: Iterable[PinPrototype] | PinPrototype | None = None,
+        inputs: Iterable[PinPrototype] | PinPrototype |
+                Iterable[str] | str |
+                None = None,
+        outputs: Iterable[PinPrototype] | PinPrototype |
+                 Iterable[str] | str |
+                 None = None,
         # end of un-normalized user inputs
         just_in_time_node:bool = False,
+        aliases:str|Iterable[str]|None = None,
+        tags:Iterable[Any] | Any | None = None,
     ):
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
@@ -423,8 +435,12 @@ def crit_script(
 # TODO enable scalable parameter counts
 def crit_script_macro(
         # un-normalized user inputs
-        inputs: Iterable[PinPrototype] | PinPrototype | None=None,
-        outputs: Iterable[PinPrototype] | PinPrototype | None=None,
+        inputs: Iterable[PinPrototype] | PinPrototype |
+                Iterable[str] | str |
+                None=None,
+        outputs: Iterable[PinPrototype] | PinPrototype |
+                 Iterable[str] | str |
+                 None=None,
         exec_inputs:  Iterable[str] | str | None = None,
         exec_outputs: Iterable[str] | str | None = None,
         # end of un-normalized user inputs
@@ -450,9 +466,12 @@ def crit_script_macro(
 ## Decorator parameter shorthand
 
 def Pin(type: type | None = str, name: str = "unnamed") -> PinPrototype:
-    """Shorthand for prototyping a ValuePin of a given type and name. Used in ``@crit_script`` an ``@crit_script_macro`` parameters"""
+    """Shorthand for prototyping a ValuePin of a given type and name. For use in ``@crit_script`` and
+    ``@crit_script_macro`` parameters.
+
+    * Note: You may also opt to give a string instead, if the conducted type may be ``Any``."""
     return PinPrototype(type, name)
 
 def Exec(name: str = "exec-unnamed") -> str:
-    """Shorthand for prototyping an ExecutionPin of a given name."""
+    """Shorthand for prototyping an ExecutionPin of a given name. For use in ``@crit_script_macro`` parameters."""
     return name
