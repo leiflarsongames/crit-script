@@ -166,9 +166,6 @@ class TestCoreLibrary(unittest.TestCase):
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
-    def test_count_and_reset(self):
-        raise NotImplementedError()
-
     def test_for_loop(self):
         raise NotImplementedError()
 
@@ -191,6 +188,8 @@ class TestCoreLibrary(unittest.TestCase):
         self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 6")
         run_graph(cr_node.exec_in_pins[1])    # reset
         self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
+
+
 
     # def test_modulo(self):          ## TODO
     #     raise NotImplementedError()
