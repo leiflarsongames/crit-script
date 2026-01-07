@@ -15,14 +15,14 @@ _ACCEPTABLE_DEVIATION_OF_MEAN = 0.02
              Pin(int, "value-out-1"),
              Pin(int, "value-out-2"))
     )
-def get_test_values(node_ctx):
+def get_test_values():
     """TODO remove this!"""
     ## TODO implement Magic Numbers! (constants)
     return 4, 6, 8
 
 @crit_script( inputs=(Pin(Any, "value-in")),
              outputs=(Pin(Any, "value-out")))
-def test_buffer(node_ctx, value_in) -> Any:
+def test_buffer(value_in) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):
@@ -48,8 +48,8 @@ class TestCoreLibrary(unittest.TestCase):
 
     def test_unused_node(self):
         numbers_node = make_node(get_test_values)
-        for index in range(3):
-            self.assertEqual(numbers_node.read_all_out_pins()[index], None, "Unevaluated nodes should have no output available!")
+        for idx in range(3):
+            self.assertEqual(numbers_node.read_all_out_pins()[idx], None, "Unevaluated nodes should have no output available!")
 
 
     def test_run_simple_graph(self):
