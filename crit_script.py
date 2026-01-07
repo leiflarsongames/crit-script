@@ -255,6 +255,12 @@ class Node:
                     list((ExecutionPin.from_prototype(self, _OUT, "exec-out", 0),)))
             case _:
                 raise NotImplementedError(f"{Node.__init__.__qualname__} is not implemented for case node_type={self.node_type}!")
+        # initialize the node, if it has a wake_up() function bound to it.
+        self.wake_up()
+
+    def wake_up(self):
+        if make_function_identifier(self.function) in ALL_WAKE_UP_FUNCTIONS:
+            ALL_WAKE_UP_FUNCTIONS[make_function_identifier(self.function)](self)
 
     def read_all_out_pins(self) -> list:
         """Returns a list of all out pins' values. Primarily for testing."""
@@ -321,7 +327,7 @@ class Node:
                 print(f"Invoked {self.function.__qualname__}")
 
         ## ensure result is iterable
-        result = _make_iterable(result)
+        result = make_iterable(result)
 
         # UPDATE OUTGOING VALUE PINS
         for index, result_value in enumerate(result):
@@ -399,7 +405,7 @@ def run_graph(start_from: ExecutionPin | Node):
 
     ## EXECUTION LOOP
     while in_pin and in_pin.node is not None:
-        out_pin = in_pin.node.invoke()
+        out_pin = in_pin.node.invoke(in_pin.index)
         # advance to next in-pin, if available
         if out_pin.has_friend():
             in_pin = out_pin.friend
@@ -412,8 +418,24 @@ def make_node(function:Callable):
     # self.wake_up()    ## TODO uncomment!
     return rv
 
+def sanitize_identifier(identifier:str):
+    """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
+    return identifier.replace("_", "-").replace(" ","-").lower()
+
 def make_function_identifier(fn:Callable) -> str:
     return sanitize_identifier(fn.__qualname__)
+
+def make_iterable(obj:Any) -> Iterable:
+    """Turns an input into an appropriate iterable.
+
+    * ``None`` -> gives an empty iterable of length 0.
+    * ``Object`` -> gives an iterable of length 1 containing that object.
+    * ``Iterable`` -> simply returns the iterable."""
+    if obj is None:
+        return tuple()      # empty tuple
+    elif not isinstance(obj, Iterable):
+        return (obj,)  # single element tuple
+    return obj         # no change made to iterable
 
 def _add_to_crit_script(
         function,
@@ -437,23 +459,7 @@ def _add_to_crit_script(
     else:
         ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs)
 
-def sanitize_identifier(identifier:str):
-    """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
-    return identifier.replace("_", "-").replace(" ","-").lower()
-
 ## CritScript Decorators
-
-def _make_iterable(obj:Any) -> Iterable:
-    """Turns an input into an appropriate iterable.
-
-    * ``None`` -> gives an empty iterable of length 0.
-    * ``Object`` -> gives an iterable of length 1 containing that object.
-    * ``Iterable`` -> simply returns the iterable."""
-    if obj is None:
-        return tuple()      # empty tuple
-    elif not isinstance(obj, Iterable):
-        return (obj,)  # single element tuple
-    return obj         # no change made to iterable
 
 # TODO enable scalable parameter counts
 def crit_script(
@@ -471,9 +477,9 @@ def crit_script(
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
     ## Normalize inputs to be iterable
-    inputs = _make_iterable(inputs)
-    outputs = _make_iterable(outputs)
-    aliases = [sanitize_identifier(alias) for alias in _make_iterable(aliases)]
+    inputs = make_iterable(inputs)
+    outputs = make_iterable(outputs)
+    aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
 
     ## TODO use aliases!
 
@@ -505,11 +511,11 @@ def crit_script_macro(
     TODO document the return types and parameters here with examples!"""
 
     ## Normalize inputs to be iterable
-    inputs = _make_iterable(inputs)
-    outputs = _make_iterable(outputs)
-    exec_inputs = _make_iterable(exec_inputs)
-    exec_outputs = _make_iterable(exec_outputs)
-    aliases = [sanitize_identifier(alias) for alias in _make_iterable(aliases)]
+    inputs = make_iterable(inputs)
+    outputs = make_iterable(outputs)
+    exec_inputs = make_iterable(exec_inputs)
+    exec_outputs = make_iterable(exec_outputs)
+    aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
 
     ## TODO use aliases!
 
@@ -527,8 +533,8 @@ def wake_up(
 ):
     """Decorator. The wrapped function is called on a node TODO explain how this stuff works! Is called on a node immediately after it is created in ``make_node``."""
     def decorator(wrapped_function):
-        def wrapper(*sub_args, **sub_kwargs):
-            return wrapped_function(*sub_args, **sub_kwargs)
+        def wrapper(node:Node):
+            return wrapped_function(node)
         wrapper.__name__ = wrapped_function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = wrapped_function.__qualname__
         ## adds this wake-up routine to ``ALL_WAKE_UP_FUNCTIONS``.
