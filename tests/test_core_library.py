@@ -169,7 +169,7 @@ class TestCoreLibrary(unittest.TestCase):
     def test_for_loop(self):
         raise NotImplementedError()
 
-    
+
 
     def test_count_and_reset(self): ## TODO
         ## NOTE: outgoing execution pins not tested!

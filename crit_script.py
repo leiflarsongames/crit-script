@@ -139,7 +139,7 @@ class ValuePin(CritScriptPin):
                 return None
 
     def write_value(self, value):
-        print(f'conducts {self.conducted_type}')  # TODO remove debug!
+        # print(f'conducts {self.conducted_type}')  # TODO remove debug!
         if self.conducted_type is not None and not isinstance(self.conducted_type, type):
             raise InvalidCritScriptFunctionException(
                 f'{self.node.function.__qualname__}\'s value pin @ index = {self.index} is not set up properly. It ' +
