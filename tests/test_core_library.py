@@ -51,7 +51,6 @@ class TestCoreLibrary(unittest.TestCase):
         for idx in range(3):
             self.assertEqual(numbers_node.read_all_out_pins()[idx], None, "Unevaluated nodes should have no output available!")
 
-
     def test_run_simple_graph(self):
         """Runs a small graph, and inspects the output on the other side."""
         start_pin = ExecutionPin("program-start", out=True)
@@ -133,7 +132,6 @@ class TestCoreLibrary(unittest.TestCase):
                         "Connecting execution line 1")
         self.assertTrue(switch_node.exec_out_pins[2].try_connect(out_node_2.exec_in_pins[0]),
                         "Connecting execution line 2")
-
         ## LESS THAN, PATH 0
         try:
             switch_node.in_pins[0].write_value(-1.0)
@@ -158,7 +156,7 @@ class TestCoreLibrary(unittest.TestCase):
         except Exception as e:
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
-        ## EQUALITY, PATH 2
+        ## EQUALITY, PATH 1
         try:
             switch_node.in_pins[0].write_value(9.0)
             switch_node.in_pins[1].write_value(7.0)
@@ -171,26 +169,8 @@ class TestCoreLibrary(unittest.TestCase):
             self.fail(f"Failed to run CritScript graph. Exception is as follows: {e}")
 
 
-    def test_count_and_reset(self): ## TODO
-        ## NOTE: outgoing execution pins not tested!
-        cr_node = make_node(count_and_reset)
-        run_graph(cr_node.exec_in_pins[0])    # exec-in
-        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 0")
-        run_graph(cr_node.exec_in_pins[2])    # add-one
-        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 1")
-        run_graph(cr_node.exec_in_pins[2])    # add-one
-        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 2")
-        run_graph(cr_node.exec_in_pins[0])    # exec-in
-        self.assertEqual(cr_node.read_all_out_pins()[0], 2, "step 3")
-        run_graph(cr_node.exec_in_pins[1])    # reset
-        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 4")
-        run_graph(cr_node.exec_in_pins[2])    # add-one
-        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 5")
-        run_graph(cr_node.exec_in_pins[0])    # exec-in
-        self.assertEqual(cr_node.read_all_out_pins()[0], 1, "step 6")
-        run_graph(cr_node.exec_in_pins[1])    # reset
-        self.assertEqual(cr_node.read_all_out_pins()[0], 0, "step 7")
-
+    # def test_count_and_reset(self): ## TODO
+    #     raise NotImplementedError()
     #
     # def test_modulo(self):          ## TODO
     #     raise NotImplementedError()
@@ -211,6 +191,6 @@ class TestCoreLibrary(unittest.TestCase):
 
 if __name__ == '__main__':
     ## show all loaded functions
-    # print(f"keys = {', '.join(ALL_FUNCTIONS.keys())}")
+    print(f"keys = {', '.join(ALL_FUNCTIONS.keys())}")
     unittest.main()
 

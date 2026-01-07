@@ -6,6 +6,8 @@ POST_MAINTAINER_CONTACT_INFORMATION = "please email the maintainer at leiflarson
 
 ALL_FUNCTIONS:dict[str, 'CritScriptNodePrototype'] = dict()
 """Dictionary of all CritScript functions, populated by calling ``add_to_crit_script``."""
+## TODO important! Update this to use `fn.__qualname__` internally instead of `sanitize_identifier(fn.__name__)`!
+## TODO cont. because we can't handle ambiguity!
 
 _IN = False
 _OUT = True
@@ -147,7 +149,7 @@ class ValuePin(CritScriptPin):
 
 
 class ExecutionPin(CritScriptPin):
-    def __init__(self, index:int=0, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     @classmethod
@@ -192,12 +194,12 @@ class CritScriptNodePrototype:
     outputs: list[CritScriptPinPrototype] | None = None
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
-    uses_own_node:bool = False
+
 
 class CritScriptNode:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
-        self.memory:Any = None    # used by functions with state to store whatever they want here.
+        self.node_memory:Any = None    # used by functions with state to store whatever they want here.
         entry = ALL_FUNCTIONS[_calc_func_identifier(function_name)]
 
         # default values
@@ -210,7 +212,7 @@ class CritScriptNode:
 
         # CREATE VALUES
         self.function: Callable = entry.function
-        self.uses_own_node:bool = entry.uses_own_node
+        self.uses_node_memory:bool = uses_node_memory
 
         # Create data pins
         self.node_type = entry.node_type if entry.node_type is not None else NodeType.Standard
@@ -257,16 +259,12 @@ class CritScriptNode:
         result:Any
 
         ## CALL THE INTERNAL FUNCTION WITH PARAMETERS FROM GIVEN PINS
-        ## build the arguments list
-        kwargs = dict()
-        pin_args = [pin.read_value() for pin in self.in_pins]
-        if self.node_type is NodeType.Macro:
-            kwargs["exec_in_index"] = exec_in_index
-        if self.uses_own_node:
-            kwargs["node"] = self
-        ## actually call the internal function
         try:
-            result = self.function(*pin_args, **kwargs)
+            if self.node_type is NodeType.Macro:
+                result = self.function(exec_in_index=exec_in_index,
+                                       *[pin.read_value() for pin in self.in_pins])
+            else:
+                result = self.function(*[pin.read_value() for pin in self.in_pins])
         except Exception as e:
             print(f"Failed while invoking {self.function.__qualname__}, see the following exception:")
             raise e
@@ -295,32 +293,10 @@ class CritScriptNode:
         if self.node_type is NodeType.Macro:
             exec_out_index = result[-1]     # Macros write which execution pin to use in the last position of their returned list.
             return self.exec_out_pins[exec_out_index]
-        elif self.is_just_in_time_node():
+        elif self.node_type is NodeType.JustInTime:
             return None
         else:
             return self.exec_out_pins[0]    # return the only exec-out pin.
-
-@dataclass
-class CritScriptNodeContext:
-    """Access point for execution pin-related baggage inside of user functions, and an access point for node memory.
-    Is always required as a parameter for @crit-script functions."""
-    _node:CritScriptNode
-    exec_in_index: int = 0
-    exec_out_index: int = 0
-
-    @property
-    def memory(self) -> Any:
-        return self._node.memory
-
-    @memory.setter
-    def memory(self, memory:Any) -> None:
-        self._node.memory = memory
-
-    def get_node(self) -> CritScriptNode:
-        """Returns the node this function is being called from.
-
-        * Note: this function is usually overkill for what you need. See the other functions/properties available to ``CritScriptNodeContext`` before deciding that ``get_node()`` is what you need."""
-        return self._node
 
 
 ## CLASS-LESS FUNCTIONS
@@ -340,7 +316,7 @@ def run_graph(start_from: ExecutionPin | CritScriptNode):
             raise ValueError("Cannot start execution from a \"just-in-time\" node!")
             ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
         elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
-            exec_in_pin = start_from.exec_in_pins[0]     # Assume the first input execution pin is to be used.
+            in_pin = start_from.exec_in_pins[0]     # Assume the first input execution pin is to be used.
         else: ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
             # punt the decision for what the start_pin is to the next if block.
             start_from:ExecutionPin = start_from.exec_out_pins[0]
@@ -350,9 +326,9 @@ def run_graph(start_from: ExecutionPin | CritScriptNode):
             if not start_from.has_friend():
                 raise ValueError("Cannot start execution from an \"out\" node with no connections!")
             else:
-                exec_in_pin = start_from.friend
+                in_pin = start_from.friend
         else:
-            exec_in_pin = start_from
+            in_pin = start_from
     else:
         ## Posts maintainer's contact information and each parameter. Note that more context is probably needed.
         raise NotImplementedError(f"In CritScript, run() was not implemented for start_from with type={type(start_from)} with value={start_from}.\n"
@@ -361,17 +337,16 @@ def run_graph(start_from: ExecutionPin | CritScriptNode):
     ## NOTE in_pin is guaranteed to be an in-pin by now. This means we can start.
 
     ## EXECUTION LOOP
-    while exec_in_pin:
-        CritScriptNodeContext(_node=node, ) # TODOTODOTODOTODO
-        exec_out_pin = exec_in_pin.node.invoke(exec_in_pin)
+    while in_pin and in_pin.node is not None:
+        out_pin = in_pin.node.invoke()
         # advance to next in-pin, if available
-        if exec_out_pin.has_friend():
-            exec_in_pin = exec_out_pin.friend
+        if out_pin.has_friend():
+            in_pin = out_pin.friend
         else:
-            exec_in_pin = None
+            in_pin = None
 
 def make_node(function:Callable):
-    """Creates a node from a function which has been submitted with a @crit_script decorator."""
+    """Creates a node from a function which has been submitted with an @crit_script decorator."""
     return CritScriptNode(function)
 
 def _calc_func_identifier(fn:Callable) -> str:
@@ -384,7 +359,6 @@ def _add_to_crit_script(
         node_type: NodeType = NodeType.Standard,
         exec_inputs:Iterable[str|CritScriptPinPrototype]|None = None,
         exec_outputs:Iterable[str|CritScriptPinPrototype]|None = None,
-        uses_own_node:bool = False,
     ):
     if isinstance(inputs, tuple):
         inputs = list(inputs)
@@ -396,9 +370,9 @@ def _add_to_crit_script(
             exec_inputs = list("exec-in")
         if exec_outputs is None:
             exec_outputs = list("exec-out")
-        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, uses_own_node=uses_own_node)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs)
     else:
-        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs, uses_own_node=uses_own_node)
+        ALL_FUNCTIONS[identifier] = CritScriptNodePrototype(function, node_type, inputs, outputs)
 
 def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
@@ -410,7 +384,6 @@ def crit_script(
         inputs:  Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
         outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None = None,
         just_in_time_node:bool = False,
-        uses_own_node: bool = False,
     ):
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
@@ -429,7 +402,7 @@ def crit_script(
         wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
-        _add_to_crit_script(wrapper, inputs, outputs, node_type, uses_own_node=uses_own_node)    # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, node_type)    # submits this function to CritScript
         return wrapper
     return decorator
 
@@ -438,7 +411,6 @@ def crit_script_macro(
         outputs: Iterable[CritScriptPinPrototype] | CritScriptPinPrototype | None=None,
         exec_inputs:  Iterable[str] | str | None = None,
         exec_outputs: Iterable[str] | str | None = None,
-        uses_own_node: bool = False,
     ):
     """Function decorator for any CritScript function that will become a macro.
     TODO document the return types and parameters here with examples!"""
@@ -465,11 +437,11 @@ def crit_script_macro(
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
-        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, uses_own_node=uses_own_node) # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs) # submits this function to CritScript
         return wrapper
     return decorator
 
-## Decorator parameter shorthand
+## Decorator paramter shorthand
 
 def Pin(type: type | None = str, name: str = "unnamed") -> CritScriptPinPrototype:
     """Shorthand for prototyping a ValuePin of a given type and name. Used in ``@crit_script`` an ``@crit_script_macro`` parameters"""
