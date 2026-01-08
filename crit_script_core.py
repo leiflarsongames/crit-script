@@ -1,6 +1,6 @@
 from random import randint, random
-from typing import Any
-from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext, wake_up
+from typing import Any, Iterable
+from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext, wake_up, run_graph
 
 
 @crit_script(inputs=(Pin('message', str)))
@@ -160,3 +160,40 @@ def wake_up_count_and_reset(ctx:NodeContext) -> int:
     if ctx.memory is None:
         ctx.memory = 0
     return ctx.memory
+
+# @crit_script_macro(
+#     inputs=Pin('list-in', Iterable[Any]),
+#     outputs=(Pin('list-index', int),
+#              Pin('list-element', Any),),
+#     exec_inputs=(Exec('begin-looping'),
+#                  Exec('break')),
+#     exec_outputs=Exec('after-looping'),
+#     aliases='for',
+# ):
+# def for_loop(ctx:NodeContext, list_in:Iterable[any]) -> tuple[int, Any]:
+#     # when loop is called to break
+#     if ctx.exec_in_index == 1:
+#
+#     while True:     # loop until break
+#         ctx.get_node().
+
+@crit_script_macro(
+    inputs=None,
+    outputs=None,
+    exec_inputs=(Exec('begin-looping'),
+                 Exec('break')),
+    exec_outputs=Exec('after-looping'),
+    aliases='while-loop',
+):
+def loop(ctx:NodeContext) -> None:
+    if ctx.exec_in_index == 1:
+        ctx.memory = False
+        return
+    else:
+        ctx.memory = True
+
+    while ctx.memory:
+        run_graph(ctx.get_node().exec_out_pins[0])
+
+    # proceed with normal execution
+    ctx.exec_out_index = 1

@@ -374,7 +374,7 @@ def can_run_graph(start_from: ExecutionPin | Node):
             not (isinstance(start_from, ExecutionPin) and (start_from.has_friend() or not start_from.out))
             )
 
-def run_graph(start_from: ExecutionPin | Node):
+def run_graph(start_from: ExecutionPin | Node) -> None:
     """Runs a CritScript graph from the given node or execution pin."""
     start_pin:ExecutionPin
     if isinstance(start_from, Node):
@@ -480,7 +480,12 @@ def crit_script(
     inputs = make_iterable(inputs)
     outputs = make_iterable(outputs)
     aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
-
+    # TODO test!
+    # ## Convert string shorthands to proper PinPrototypes
+    # if len(inputs) > 0 and isinstance(inputs[0], str):
+    #     inputs:Iterable[PinPrototype] = [Pin(in_pin) for in_pin in inputs]
+    # if len(outputs) > 0 and isinstance(outputs[0], str):
+    #     outputs:Iterable[PinPrototype] = [Pin(out_pin) for out_pin in outputs]
     ## TODO use aliases!
 
     def decorator(function):
@@ -516,6 +521,13 @@ def crit_script_macro(
     exec_inputs = make_iterable(exec_inputs)
     exec_outputs = make_iterable(exec_outputs)
     aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
+    # TODO test!
+    # ## Convert string shorthands to proper PinPrototypes
+    # # TODO this relies on the given iterable ALSO implementing __len__()... include a fallback or Iterable-specific way of ensuring there's an element in there?
+    # if len(inputs) > 0 and isinstance(inputs[0], str):
+    #     inputs:Iterable[PinPrototype] = [Pin(in_pin, Any) for in_pin in inputs]
+    # if len(outputs) > 0 and isinstance(outputs[0], str):
+    #     outputs:Iterable[PinPrototype] = [Pin(out_pin, Any) for out_pin in outputs]
 
     ## TODO use aliases!
 
@@ -531,7 +543,7 @@ def crit_script_macro(
 def wake_up(
     target_function:Callable
 ):
-    """Decorator. The wrapped function is called on a node TODO explain how this stuff works! Is called on a node immediately after it is created in ``make_node``."""
+    """Is called on new nodes whenever they are created."""
     def decorator(wrapped_function):
         def wrapper(node:Node):
             return wrapped_function(node)
