@@ -5,3 +5,10 @@
     * the -"..." to say "does not include anything within the quotations"
     * include a type:<node_type> or -type:<node_type>
     * include a has_out:<pin_type> or -has_out:<pin_type>
+
+# User-creatable objects
+* Events (in Python)
+* Events (in CritScript)
+* Structs
+* "Enumerations"
+* ~~State~~ Very low priority, I think.
