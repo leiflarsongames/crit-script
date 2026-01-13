@@ -51,6 +51,14 @@ class InvalidCritScriptFunctionException(CritScriptException):
     def __init__(self, function):
         super().__init__(f"{function} must return a list of outputs, but does not.")
 
+class CritScriptValueException(CritScriptException):
+    def __init__(self, message):
+        super().__init__(message)
+
+class CritScriptStopGraph(StopIteration):
+    def __init__(self, msg):
+        super().__init__(msg)
+
 class CritScriptPin:
     def __init__(self, name:str="unnamed", node: 'Node|None' =None, conducted_type: type | None=None, out:bool=False):
         self.name:str = name
@@ -125,8 +133,18 @@ class ValuePin(CritScriptPin):
         )
 
     def read_value(self) -> Any:
+        # Calculate the read value fresh each time it is called for.
+        # TODO this should probably be optimized to only run if there are changes in initial conditions. Not the
+        # end of the world if we cant because operations with high runtime cost should be explicitly executed nodes
+        # anyways, but y'know. No need to multiply the same two numbers six hundred times when we could just do it
+        # once. But also should dice should be rerolled each time? I'd like to try some A-B testing on this, if at all
+        # possible!
         if self.node.is_just_in_time_node():
-            raise NotImplementedError("\"just-in-time\" logic is not implemented!") # TODO implement just-in-time logic!
+            ## TODO what are we doing calling this on EVERY PIN!?
+            self.node.invoke(debug=True)    # begin propagating "just-in-time" logic
+            return self.last_value
+            # TODO make sure "just-in-time" logic isn't implemented in more places than necessary!
+            # raise NotImplementedError("\"just-in-time\" logic is not implemented!") # TODO implement just-in-time logic!
         else:
             if self.out:
                 return self.last_value
@@ -200,6 +218,11 @@ class ExecutionPin(CritScriptPin):
 class PinPrototype:
     conducted_type:type|None = str
     name:str = "unnamed"
+    split_format:str|None = None
+    tail:bool = False
+
+    def can_split_pin(self) -> bool:
+        return self.split_format is not None
 
 @dataclass
 class NodePrototype:
@@ -213,7 +236,8 @@ class NodePrototype:
 class Node:
     def __init__(self, function_name):
         # (function, inputs, outputs, node_type, exec_out_pins)
-        entry = ALL_FUNCTIONS[make_function_identifier(function_name)]
+        self._name = make_crit_script_identifier(function_name) # DEBUG ONLY
+        entry = ALL_FUNCTIONS[make_crit_script_identifier(function_name)]
 
         # default values
         self.node_type: NodeType = NodeType.Standard
@@ -258,9 +282,15 @@ class Node:
         # initialize the node, if it has a wake_up() function bound to it.
         self.wake_up()
 
+    def get_node(self):
+        """Returns self. Note: you probably thought you were calling NodeContext.get_node(), not Node.get_node(). You can just use the node directly if this is what you're using.
+
+        e.g., ``node.get_node().out_pins[0].read_value()`` can be simplified to ``node.out_pins[0].read_value()``."""
+        return self
+
     def wake_up(self):
-        if make_function_identifier(self.function) in ALL_WAKE_UP_FUNCTIONS:
-            ALL_WAKE_UP_FUNCTIONS[make_function_identifier(self.function)](self)
+        if make_crit_script_identifier(self.function) in ALL_WAKE_UP_FUNCTIONS:
+            ALL_WAKE_UP_FUNCTIONS[make_crit_script_identifier(self.function)](self)
 
     def read_all_out_pins(self) -> list:
         """Returns a list of all out pins' values. Primarily for testing."""
@@ -280,10 +310,10 @@ class Node:
             else:
                 msg_added:str = ' because a node was not attached to that pin and it did not have a magic number!'
                 if in_pin.has_friend() and in_pin.friend.node is not None:
-                    msg_added = (f' because the connected {make_function_identifier(self.function)} failed to give a '
+                    msg_added = (f' because the connected {make_crit_script_identifier(self.function)} failed to give a '
                                  f'value for its pin "{in_pin.friend.name}" when invoked just-in-time!')
                 raise CritScriptException(
-                    f'"just-in-time" node {make_function_identifier(self.function)} failed to summon needed value from '
+                    f'"just-in-time" node {make_crit_script_identifier(self.function)} failed to summon needed value from '
                     f'value pin "{in_pin.name}"' + msg_added)
 
     def invoke(self, exec_in_index:int=0, debug=False) -> ExecutionPin | None:
@@ -295,6 +325,7 @@ class Node:
         #   TODO update this note!
         result:Any
 
+        ## TODO this could be a source of optimization? When we're done building, we gotta profile this stuff.
         node_context_object = NodeContext(self, exec_in_index, debug)
         kwargs = dict()
         kwargs["ctx"] = node_context_object
@@ -339,8 +370,15 @@ class Node:
         ## SELECT OUTGOING EXECUTION PIN
         if self.node_type is NodeType.JustInTime:
             return None
-        else:
+        elif node_context_object.exec_out_index is not None:
             return self.exec_out_pins[node_context_object.exec_out_index]
+        else:
+            return None
+        ## TODO handle if the ``exec_out_index`` is out of range!
+
+    def refresh_values_as_just_in_time_node(self):
+        ## TODO procedurally implement "just-in-time" logic completely internal to this function!
+        pass
 
 class NodeContext:
     def __init__(
@@ -350,7 +388,7 @@ class NodeContext:
         debug:bool = False):
         self._node:Node = node
         self.exec_in_index:int = exec_in_index
-        self.exec_out_index:int = 0
+        self.exec_out_index:int|None = 0        # Note: this is set to None by functions which intentionally end a graph's execution.
         self.debug:bool = debug
 
     @property
@@ -382,6 +420,7 @@ def run_graph(start_from: ExecutionPin | Node) -> None:
         if start_from.is_just_in_time_node():
             raise ValueError("Cannot start execution from a \"just-in-time\" node!")
             ## TODO is this true? We can probably infer just fine where to start. Wait for CritScript to be used by a GM before deciding on this issue.
+            # Yeah, this would actually be pretty vague if our just-in-time node had multiple connections. Again, see if people need this feature before bothering further.
         elif start_from.node_type is NodeType.Standard or start_from.node_type is NodeType.Macro:
             in_pin = start_from.exec_in_pins[0]     # Assume the first input execution pin is to be used.
         else: ## NOTE this assumes that the node type is some kind of event, which guarantees an exec-out pin.
@@ -407,13 +446,13 @@ def run_graph(start_from: ExecutionPin | Node) -> None:
     while in_pin and in_pin.node is not None:
         out_pin = in_pin.node.invoke(in_pin.index)
         # advance to next in-pin, if available
-        if out_pin.has_friend():
+        if out_pin is not None and out_pin.has_friend():
             in_pin = out_pin.friend
         else:
             in_pin = None
 
 def make_node(function:Callable):
-    """Creates a node from a function which has been submitted with an @crit_script decorator."""
+    """Creates a node from a function which has been submitted with a @crit_script decorator."""
     rv = Node(function)
     # self.wake_up()    ## TODO uncomment!
     return rv
@@ -422,7 +461,7 @@ def sanitize_identifier(identifier:str):
     """Makes a given identifier comply with the lower-kebab-case variable names in CritScript."""
     return identifier.replace("_", "-").replace(" ","-").lower()
 
-def make_function_identifier(fn:Callable) -> str:
+def make_crit_script_identifier(fn:Callable) -> str:
     return sanitize_identifier(fn.__qualname__)
 
 def make_iterable(obj:Any) -> Iterable:
@@ -434,8 +473,8 @@ def make_iterable(obj:Any) -> Iterable:
     if obj is None:
         return tuple()      # empty tuple
     elif not isinstance(obj, Iterable):
-        return (obj,)  # single element tuple
-    return obj         # no change made to iterable
+        return (obj,)       # single element tuple
+    return obj              # no change
 
 def _add_to_crit_script(
         function,
@@ -449,7 +488,7 @@ def _add_to_crit_script(
         inputs = list(inputs)
     if isinstance(outputs, tuple):
         outputs = list(outputs)
-    identifier = make_function_identifier(function)
+    identifier = make_crit_script_identifier(function)
     if node_type is NodeType.Macro:
         if exec_inputs is None:
             exec_inputs = list("exec-in")
@@ -545,25 +584,28 @@ def wake_up(
 ):
     """Is called on new nodes whenever they are created."""
     def decorator(wrapped_function):
-        def wrapper(node:Node):
+        def wrapper(node:Node):     # TODO this should probably be node_context instead for ease of teaching?
             return wrapped_function(node)
         wrapper.__name__ = wrapped_function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = wrapped_function.__qualname__
         ## adds this wake-up routine to ``ALL_WAKE_UP_FUNCTIONS``.
-        ALL_WAKE_UP_FUNCTIONS[make_function_identifier(target_function)] = wrapper
+        ALL_WAKE_UP_FUNCTIONS[make_crit_script_identifier(target_function)] = wrapper
         return wrapper
     return decorator
 
 
 ## Decorator parameter shorthand
 
-def Pin(name: str = "unnamed", type: type | None = Any) -> PinPrototype:
+def Pin(name: str = "unnamed", type: type | None = Any, split_format:str|None = None) -> PinPrototype:
     """Shorthand for prototyping a ValuePin of a given type and name. For use in ``@crit_script`` and
     ``@crit_script_macro`` parameters.
 
     * Note: You may also opt to give a string instead, if the conducted type may be ``Any``."""
     return PinPrototype(type, name)
 
-def Exec(name: str = "exec-unnamed") -> str:
+def Exec(name: str = "exec-unnamed", split_format:str|None = None) -> str:
+    ## TODO update this to return a PinPrototype!
     """Shorthand for prototyping an ExecutionPin of a given name. For use in ``@crit_script_macro`` parameters."""
     return name
+
+
