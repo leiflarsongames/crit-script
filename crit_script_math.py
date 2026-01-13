@@ -1,8 +1,7 @@
-from decimal import Decimal
 from itertools import product
 from typing import Any
 
-from crit_script import crit_script, Pin, NodeContext, make_iterable, CritScriptValueException
+from crit_script import crit_script, Pin, NodeContext, make_iterable
 
 
 ## ARITHMETIC FUNCTIONS
