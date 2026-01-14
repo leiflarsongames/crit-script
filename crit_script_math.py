@@ -54,13 +54,33 @@ def divide_as_decimal(ctx:NodeContext, dividend:Any, divisor:Any) -> Any:
             Pin("divisor")),
     outputs=(Pin("quotient"), Pin("remainder")),
     just_in_time_node=True,
-    aliases=("integer-division", "divide-as-integer", "modulo", "%")
+    aliases=("integer-division", "modulo", "%")
 )
 def divide_with_remainder(ctx:NodeContext, dividend:Any, divisor:Any) -> Any:
     return (
         dividend // divisor,    # quotient
         dividend % divisor,     # remainder
     )
+
+@crit_script(
+    inputs=(Pin("dividend"),
+            Pin("divisor")),
+    outputs=(Pin("quotient")),
+    just_in_time_node=True,
+    aliases=("integer-division",)
+)
+def divide_as_integer(ctx:NodeContext, dividend:Any, divisor:Any) -> Any:
+    return dividend // divisor  # quotient only
+
+@crit_script(
+    inputs=(Pin("dividend"),
+            Pin("divisor")),
+    outputs=(Pin("remainder")),
+    just_in_time_node=True,
+    aliases=("modulo", "%",)
+)
+def remainder(ctx:NodeContext, dividend:Any, divisor:Any) -> Any:
+    return dividend % divisor   # remainder only
 
 ## clamps
 
@@ -218,6 +238,18 @@ def boolean_and(ctx:NodeContext, values:Any) -> bool:
     inputs=Pin("values-in", split_format="value-in"),
     outputs=Pin("value-out", split_format="value-out"),
     just_in_time_node=True,
+    aliases=("xor",),
+)
+def boolean_xor(ctx:NodeContext, values:Any) -> bool:
+    """Returns True when an odd number of inputs are True."""
+    values = make_iterable(values)
+    accum = sum([1 if v else 0 for v in values])
+    return accum % 2 == 1
+
+@crit_script(
+    inputs=Pin("values-in", split_format="value-in"),
+    outputs=Pin("value-out", split_format="value-out"),
+    just_in_time_node=True,
     aliases=("xor-only-one", "boolean-xor-only-one"),
 )
 def boolean_only_one(ctx:NodeContext, values:Any) -> bool:
@@ -226,15 +258,5 @@ def boolean_only_one(ctx:NodeContext, values:Any) -> bool:
     accum = sum([1 if v else 0 for v in values])
     return accum == 1
 
-@crit_script(
-    inputs=Pin("values-in", split_format="value-in"),
-    outputs=Pin("value-out", split_format="value-out"),
-    just_in_time_node=True,
-    aliases=("xor",),
-)
-def boolean_xor(ctx:NodeContext, values:Any) -> bool:
-    """Returns True when an odd number of inputs is True."""
-    values = make_iterable(values)
-    accum = sum([1 if v else 0 for v in values])
-    return accum % 2 == 1
+
 

@@ -1,7 +1,8 @@
 from random import randint, random
 from typing import Any, Iterable
 from crit_script import crit_script, Pin, Exec, crit_script_macro, NodeContext, wake_up, run_graph, Node, \
-    CritScriptStopGraph
+    CritScriptStopGraph, make_iterable, make_mutable_iterable
+
 
 ## DEBUG STUFF, USES THE CONSOLE
 @crit_script(inputs=Pin('message'))
@@ -17,29 +18,63 @@ def debug_print(ctx, *inputs: str):
     print('\n'.join(*inputs))
 
 ## REROUTES AND VALUE/EXECUTION FLOW
-@crit_script()
+# @crit_script(
+#     inputs=Pin('value-in'),
+#     outputs=Pin('value-out'),
+#     category="flow",
+# )
+# def buffer(ctx, value_in: Any) -> Any:
+#     """Returns value-in. Are you looking for the ``reroute-value`` node instead?"""
+#     return Any
+
+@crit_script(
+    category="flow"
+)
 def reroute_execution(ctx) -> None:
     """Does nothing. Used for redirecting an execution line."""
     pass
 
-@crit_script(inputs=Pin('value-in'),
-             outputs=Pin('value-out'),
-             just_in_time_node=True)
+@crit_script(
+    inputs=Pin('value-in'),
+    outputs=Pin('value-out'),
+    just_in_time_node=True,
+    category="flow",
+)
 def reroute_value(ctx, value_in) -> Any:
     """Does nothing. Used for redirecting a value line."""
     return value_in
 
 @crit_script(
-    inputs=(Pin('value-in-0', float),
-            Pin('value-in-1', float),
-            Pin('value-in-2', float)),
-    outputs=(Pin('value-out-0', float),
-             Pin('value-out-1', float),
-             Pin('value-out-2', float))
+    inputs=Pin('value-in'),
+    outputs=Pin('values-out', split_format='value-out'),
+    just_in_time_node=True,
+    category="flow",
 )
-def sort_ascending(ctx, *args: Any) -> list:
+def fork_value(ctx:NodeContext, value_in:Any) -> Any:
+    """Returns shallow copies of the value-in to every value-out pin."""
+    values_out = list()
+    for i in range(ctx.get_node().out_pins[0].split_pin_count):
+        values_out.append(value_in)
+    return values_out
+
+@crit_script_macro(
+    inputs=None,
+    outputs=None,
+    exec_inputs=Exec('execs-in', split_format='exec-in'),
+    exec_outputs=Exec('exec-out'),
+    category="flow",
+)
+def junction(ctx:NodeContext): ## TODO check name used on paper prototype!!!
+    pass
+
+
+@crit_script(
+    inputs=Pin('values-in', split_format='value-in'),
+    outputs=Pin('values-out', split_format='value-out'),
+)
+def sort_ascending(ctx, values: Any) -> list:
     """Outputs each input in order with the lowest at the top, and the highest at the bottom."""
-    rv = list(*args)
+    rv = make_mutable_iterable(values)
     rv.sort()
     return rv
 
@@ -119,27 +154,6 @@ def switch_by_comparison(ctx:NodeContext, a, b) -> None:
         ctx.exec_out_index = 1
     else:
         ctx.exec_out_index = 2
-
-@crit_script(
-    inputs=(Pin('dividend', int),
-            Pin('divisor', int)),
-    outputs=Pin('modulo', int),
-    aliases='modulo',
-    just_in_time_node=True
-)
-def remainder(ctx, a, b) -> int:
-    """Returns the remainder of ``dividend``
-    divided by ``divisor``. Also known as
-    the 'modulo' operator."""
-    return a % b
-
-@crit_script(
-    inputs=('addend-0', 'addend-1'),
-    outputs='sum',
-    just_in_time_node=True
-)
-def add(a, b) -> float:
-    return a + b
 
 @crit_script_macro(
     inputs=None,

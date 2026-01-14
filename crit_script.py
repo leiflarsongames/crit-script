@@ -60,11 +60,14 @@ class CritScriptStopGraph(StopIteration):
         super().__init__(msg)
 
 class CritScriptPin:
-    def __init__(self, name:str="unnamed", node: 'Node|None' =None, conducted_type: type | None=None, out:bool=False):
+    def __init__(self, name:str="unnamed", node: 'Node|None' =None, conducted_type: type | None=None, out:bool=False, split_format:str|None=None, split_pin_count:int=1, tail:bool=False):
         self.name:str = name
         self.node: Node | None = node
         self.conducted_type:type|None = conducted_type
         self.out:bool = out
+        self.split_format = split_format,
+        self.split_pin_count = split_pin_count,
+        self.tail = tail,
         self.friend:CritScriptPin|None = None   # The other pin this one is connected to.
 
     def can_connect(self, other:'CritScriptPin') -> bool:
@@ -129,7 +132,10 @@ class ValuePin(CritScriptPin):
             name=prototype.name,
             node=node,
             out=out,
-            index=index
+            index=index,
+            split_format = prototype.split_format,
+            split_pin_count = prototype.split_pin_count,
+            tail = prototype.tail,
         )
 
     def read_value(self) -> Any:
@@ -187,6 +193,7 @@ class ExecutionPin(CritScriptPin):
         super().__init__(*args, **kwargs)
         self._index:int = index
 
+
     @property
     def index(self) -> int:
         return self._index
@@ -201,6 +208,9 @@ class ExecutionPin(CritScriptPin):
                 node=node,
                 out=out,
                 index=index,
+                split_format = prototype.split_format,
+                split_pin_count = prototype.split_pin_count,
+                tail = prototype.tail,
             )
         # PinPrototype-based prototype
         if prototype.conducted_type is not None:
@@ -219,6 +229,7 @@ class PinPrototype:
     conducted_type:type|None = str
     name:str = "unnamed"
     split_format:str|None = None
+    split_pin_count:int = 1
     tail:bool = False
 
     def can_split_pin(self) -> bool:
@@ -232,6 +243,7 @@ class NodePrototype:
     outputs: list[PinPrototype] | None = None
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
+    category: str | None = None     # used for searching
 
 class Node:
     def __init__(self, function_name):
@@ -246,6 +258,7 @@ class Node:
         self.exec_in_pins:list[ExecutionPin] = list()
         self.exec_out_pins:list[ExecutionPin] = list()
         self.memory:Any = None      # Note: is not initialized here.
+        self.tail:Any = None
 
         # CREATE VALUES
         self.function: Callable = entry.function
@@ -469,12 +482,28 @@ def make_iterable(obj:Any) -> Iterable:
 
     * ``None`` -> gives an empty iterable of length 0.
     * ``Object`` -> gives an iterable of length 1 containing that object.
-    * ``Iterable`` -> simply returns the iterable."""
+    * ``Iterable`` -> simply returns the iterable.
+
+    Note: Use alternative function ``make_mutable_iterable`` if you need to change the resulting iterable. This function does not provide any guarantees of stability when the iterable is mutated thereafter TODO check if mutating a result of this function affects the mutable iterable passed in!"""
     if obj is None:
         return tuple()      # empty tuple
     elif not isinstance(obj, Iterable):
         return (obj,)       # single element tuple
     return obj              # no change
+
+def make_mutable_iterable(obj:Any) -> list:
+    """Turns an input into an appropriate list.
+
+        * ``None`` -> gives an empty list of length 0.
+        * ``Object`` -> gives a list of length 1 containing that object.
+        * ``Iterable`` -> returns as a list instead of whatever iterable type it was before.
+
+    Note: Alternative function ``make_iterable`` is often less memory intensive for lists of length 0 and 1. TODO fact check this!"""
+    if obj is None:
+        return list()   # empty list
+    elif not isinstance(obj, Iterable):
+        return [obj,]   # single element list
+    return list(obj)    # cast to list
 
 def _add_to_crit_script(
         function,
@@ -483,6 +512,7 @@ def _add_to_crit_script(
         node_type: NodeType = NodeType.Standard,
         exec_inputs: Iterable[str | PinPrototype] | None = None,
         exec_outputs: Iterable[str | PinPrototype] | None = None,
+        category: str|None = None       # Note: Category is NOT normalized to be a value.
     ):
     if isinstance(inputs, tuple):
         inputs = list(inputs)
@@ -494,9 +524,9 @@ def _add_to_crit_script(
             exec_inputs = list("exec-in")
         if exec_outputs is None:
             exec_outputs = list("exec-out")
-        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs)
+        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, category=category)
     else:
-        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs)
+        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, category=category)
 
 ## CritScript Decorators
 
@@ -512,6 +542,7 @@ def crit_script(
         aliases: str | Iterable[str] | None = None,
         # end of un-normalized user inputs
         just_in_time_node:bool = False,
+        category:str|None = None
     ):
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
@@ -533,7 +564,7 @@ def crit_script(
         wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
-        _add_to_crit_script(wrapper, inputs, outputs, node_type)    # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, node_type, category=category)    # submits this function to CritScript
         return wrapper
     return decorator
 
@@ -550,6 +581,7 @@ def crit_script_macro(
         exec_outputs: Iterable[str] | str | None = None,
         aliases:      Iterable[str] | str | None = None,
         # end of un-normalized user inputs
+        category: str | None = None,
     ):
     """Function decorator for any CritScript function that will become a macro.
     TODO document the return types and parameters here with examples!"""
@@ -575,7 +607,7 @@ def crit_script_macro(
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
-        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs) # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, category=category) # submits this function to CritScript
         return wrapper
     return decorator
 
