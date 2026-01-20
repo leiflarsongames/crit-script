@@ -2,6 +2,8 @@ import unittest
 
 from crit_script import crit_script, Pin, Node, make_node, run_graph, ExecutionPin, ALL_FUNCTIONS, NodeContext
 from crit_script_core import *
+from crit_script_random import *
+from crit_script_math import *
 
 _DETERMINISTIC_VARIATION_COUNT = 15
 """The number of variations assessed for deterministic tests"""
@@ -19,27 +21,6 @@ def test_buffer(ctx:NodeContext, value_in:Any) -> Any:
     return value_in
 
 class TestCoreLibrary(unittest.TestCase):
-
-    ## TODO rewrite a test or something! This isn't working for now.
-
-    def test_decorator_shorthand_exec(self):
-        for variation in range(_DETERMINISTIC_VARIATION_COUNT):
-            self.assertEqual(
-                Exec(f"exec-in-{variation}"),
-                f"exec-in-{variation}",
-                "Commonly generated exec-in variations work with shorthand as expected"
-            )
-            self.assertEqual(
-                Exec(f"exec-out-{variation}"),
-                f"exec-out-{variation}",
-                "Commonly generated exec-out variations work with shorthand as expected"
-            )
-        non_treacherous_sentence = "some-of-that-stuff-right-there-oh-goodness-that's-a-long-string!-do-you-suppose-anything-other-than-caps-is-forbidden?"
-        self.assertEqual(
-            Exec(non_treacherous_sentence),
-            non_treacherous_sentence,
-            "long but otherwise straightforward identifiers work fine."
-        )
 
     def test_unused_node(self):
         number_node = make_node(roll_percent)

@@ -1,6 +1,6 @@
-"""Implements internal functionality for CritScript.
+"""Implements functionality internal to CritScript.
 
-``@author``:  Leif Larson Games"""
+``@author``: Leif Games leiflarsongames@gmail.com"""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -193,7 +193,6 @@ class ExecutionPin(CritScriptPin):
         super().__init__(*args, **kwargs)
         self._index:int = index
 
-
     @property
     def index(self) -> int:
         return self._index
@@ -246,54 +245,96 @@ class NodePrototype:
     category: str | None = None     # used for searching
 
 class Node:
-    def __init__(self, function_name):
-        # (function, inputs, outputs, node_type, exec_out_pins)
-        self._name = make_crit_script_identifier(function_name) # DEBUG ONLY
-        entry = ALL_FUNCTIONS[make_crit_script_identifier(function_name)]
+    def __init__(self):
+        self._name = "NO-DEBUG-NAME-ASSIGNED"
+        self.node_type: NodeType = NodeType.Standard
+        self.in_pins: list[ValuePin] = list()
+        self.out_pins: list[ValuePin] = list()
+        self.exec_in_pins: list[ExecutionPin] = list()
+        self.exec_out_pins: list[ExecutionPin] = list()
+        self.memory: Any = None
+        self.friend: Any = None     # A head node's friend is its connected tail node, and vice versa.
+        self.tail: bool = False
+        self.function:Callable|None = None
+
+    @classmethod
+    def _make_head_node(cls, function) -> 'Node':
+        """Returns the created node. If multiple nodes are created, returns the head node.
+
+        Note to User: You're probably looking for ``make_node``."""
+        node = Node()
+        node._name = make_crit_script_identifier(function) # DEBUG ONLY
+        entry = ALL_FUNCTIONS[make_crit_script_identifier(function)]
 
         # default values
-        self.node_type: NodeType = NodeType.Standard
-        self.in_pins:list[ValuePin] = list()
-        self.out_pins:list[ValuePin] = list()
-        self.exec_in_pins:list[ExecutionPin] = list()
-        self.exec_out_pins:list[ExecutionPin] = list()
-        self.memory:Any = None      # Note: is not initialized here.
-        self.tail:Any = None
+        has_tail = False
+        tail_node = Node()
 
         # CREATE VALUES
-        self.function: Callable = entry.function
+        node.function: Callable = entry.function
+
+        def attach_pin(
+                from_prototype_method: Callable,
+                out: bool,
+                prototype: object,
+                head: Node,
+                tail: Node,
+                head_target: list,
+                tail_target: list
+        ) -> bool:
+            """Attaches a group of pins to the given head and tail nodes."""
+            pin:CritScriptPin
+            if prototype.tail:
+                pin = from_prototype_method(tail, out, prototype, len(tail_target))
+                tail_target.append(pin)
+            else:
+                pin = from_prototype_method(head, out, prototype, len(head_target))
+                head_target.append(pin)
+            return True
 
         # Create value pins
-        self.node_type = entry.node_type if entry.node_type is not None else NodeType.Standard
-        if entry.inputs is not None:
-            self.in_pins = list([ValuePin.from_prototype(self, _IN, prototype, index)
-                                 for index, prototype in enumerate(entry.inputs)])
-        if entry.outputs is not None:
-            self.out_pins = list([ValuePin.from_prototype(self, _OUT, prototype, index)
-                                  for index, prototype in enumerate(entry.outputs)])
+        node.node_type = entry.node_type if entry.node_type is not None else NodeType.Standard
+        inputs = make_iterable(entry.inputs)
+        for prototype in inputs:
+            attach_pin(ValuePin.from_prototype, _IN, prototype,
+                       node, tail_node,
+                       node.in_pins, tail_node.in_pins)
+        outputs = make_iterable(entry.outputs)
+        for prototype in outputs:
+            attach_pin(ValuePin.from_prototype, _OUT, prototype,
+                       node, tail_node,
+                       node.out_pins, tail_node.out_pins)
 
         # Create execution pins
-        match self.node_type:
+        match node.node_type:
             case NodeType.JustInTime:
                 pass    # don't bother setting up execution pins on "just-in-time" nodes.
             case NodeType.Standard:
-                self.exec_in_pins  = list((ExecutionPin.from_prototype(self, _IN, "exec-in", 0),))
-                self.exec_out_pins = list((ExecutionPin.from_prototype(self, _OUT, "exec-out", 0),))
+                node.exec_in_pins  = list((ExecutionPin.from_prototype(node, _IN, Exec("exec-in"), 0),))
+                node.exec_out_pins = list((ExecutionPin.from_prototype(node, _OUT, Exec("exec-out"), 0),))
             case NodeType.Macro:
-                self.exec_in_pins  = (
-                    list([ExecutionPin.from_prototype(self,  _IN, prototype, index)
+                ## TODO refactor to allow head-tail nodes!
+                node.exec_in_pins  = (
+                    list([ExecutionPin.from_prototype(node,  _IN, prototype, index)
                           for index, prototype in enumerate(entry.exec_inputs)])
                         if entry.exec_inputs is not None else
-                    list((ExecutionPin.from_prototype(self,  _IN,  "exec-in", 0),)))
-                self.exec_out_pins = (
-                    list([ExecutionPin.from_prototype(self, _OUT, prototype, index)
+                    list((ExecutionPin.from_prototype(node,  _IN,  Exec("exec-in"), 0),)))
+                node.exec_out_pins = (
+                    list([ExecutionPin.from_prototype(node, _OUT, prototype, index)
                           for index, prototype in enumerate(entry.exec_outputs)])
                         if entry.exec_outputs is not None else
-                    list((ExecutionPin.from_prototype(self, _OUT, "exec-out", 0),)))
+                    list((ExecutionPin.from_prototype(node, _OUT, Exec("exec-out"), 0),)))
             case _:
-                raise NotImplementedError(f"{Node.__init__.__qualname__} is not implemented for case node_type={self.node_type}!")
+                raise NotImplementedError(f"{Node.__init__.__qualname__} is not implemented for case node_type={node.node_type}!")
         # initialize the node, if it has a wake_up() function bound to it.
-        self.wake_up()
+        node.wake_up()
+
+        ## attach tail node if it exists
+        if has_tail:
+            node.friend = tail_node
+            tail_node.friend = node
+
+        return node
 
     def get_node(self):
         """Returns self. Note: you probably thought you were calling NodeContext.get_node(), not Node.get_node(). You can just use the node directly if this is what you're using.
@@ -465,8 +506,8 @@ def run_graph(start_from: ExecutionPin | Node) -> None:
             in_pin = None
 
 def make_node(function:Callable):
-    """Creates a node from a function which has been submitted with a @crit_script decorator."""
-    rv = Node(function)
+    """Creates a node from a function which has been submitted with a @crit_script or @crit_script_macro decorator."""
+    rv = Node._make_head_node(function)
     # self.wake_up()    ## TODO uncomment!
     return rv
 
@@ -512,13 +553,17 @@ def _add_to_crit_script(
         node_type: NodeType = NodeType.Standard,
         exec_inputs: Iterable[str | PinPrototype] | None = None,
         exec_outputs: Iterable[str | PinPrototype] | None = None,
-        category: str|None = None       # Note: Category is NOT normalized to be a value.
+        category: str|None = None,      # Note: Category is NOT normalized to be a value.
+        custom_name: str|None = None,
     ):
     if isinstance(inputs, tuple):
         inputs = list(inputs)
     if isinstance(outputs, tuple):
         outputs = list(outputs)
-    identifier = make_crit_script_identifier(function)
+    if custom_name is None:
+        identifier = make_crit_script_identifier(function)
+    else:
+        identifier = sanitize_identifier(custom_name)
     if node_type is NodeType.Macro:
         if exec_inputs is None:
             exec_inputs = list("exec-in")
@@ -540,6 +585,7 @@ def crit_script(
                  Iterable[str] | str |
                  None = None,
         aliases: str | Iterable[str] | None = None,
+        custom_name: str | None = None,        ## TODO allow custom names!!!!!
         # end of un-normalized user inputs
         just_in_time_node:bool = False,
         category:str|None = None
@@ -550,6 +596,8 @@ def crit_script(
     inputs = make_iterable(inputs)
     outputs = make_iterable(outputs)
     aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
+    if custom_name:
+        custom_name = sanitize_identifier(custom_name)
     # TODO test!
     # ## Convert string shorthands to proper PinPrototypes
     # if len(inputs) > 0 and isinstance(inputs[0], str):
@@ -564,9 +612,18 @@ def crit_script(
         wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
-        _add_to_crit_script(wrapper, inputs, outputs, node_type, category=category)    # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, node_type, category=category, custom_name=custom_name)    # submits this function to CritScript
         return wrapper
     return decorator
+
+def normalize_pin_prototype(given, as_value_pin:bool):
+    if isinstance(given, PinPrototype):
+        return given
+    if isinstance(given, string):
+        if as_value_pin:
+            return PinPrototype(Any, given)
+        else:
+            return PinPrototype(None, given)
 
 # TODO enable scalable parameter counts
 def crit_script_macro(
@@ -577,9 +634,14 @@ def crit_script_macro(
         outputs: Iterable[PinPrototype] | PinPrototype |
                  Iterable[str] | str |
                  None=None,
-        exec_inputs:  Iterable[str] | str | None = None,
-        exec_outputs: Iterable[str] | str | None = None,
+        exec_inputs:  Iterable[PinPrototype] | PinPrototype |
+                      Iterable[str] | str |
+                      None=None,
+        exec_outputs: Iterable[PinPrototype] | PinPrototype |
+                      Iterable[str] | str |
+                      None=None,
         aliases:      Iterable[str] | str | None = None,
+        custom_name:  str | None = None,
         # end of un-normalized user inputs
         category: str | None = None,
     ):
@@ -591,7 +653,15 @@ def crit_script_macro(
     outputs = make_iterable(outputs)
     exec_inputs = make_iterable(exec_inputs)
     exec_outputs = make_iterable(exec_outputs)
+    inputs = [normalize_pin_prototype(p, as_value_pin=True) for p in inputs]
+    outputs = [normalize_pin_prototype(p, as_value_pin=True) for p in outputs]
+    exec_inputs = [normalize_pin_prototype(p, as_value_pin=False) for p in exec_inputs]
+    exec_outputs = [normalize_pin_prototype(p, as_value_pin=False) for p in exec_outputs]
+
     aliases = [sanitize_identifier(alias) for alias in make_iterable(aliases)]
+    if custom_name:
+        custom_name = sanitize_identifier(custom_name)
+
     # TODO test!
     # ## Convert string shorthands to proper PinPrototypes
     # # TODO this relies on the given iterable ALSO implementing __len__()... include a fallback or Iterable-specific way of ensuring there's an element in there?
@@ -607,7 +677,7 @@ def crit_script_macro(
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
-        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, category=category) # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, category=category, custom_name=custom_name) # submits this function to CritScript
         return wrapper
     return decorator
 
@@ -633,11 +703,13 @@ def Pin(name: str = "unnamed", type: type | None = Any, split_format:str|None = 
     ``@crit_script_macro`` parameters.
 
     * Note: You may also opt to give a string instead, if the conducted type may be ``Any``."""
-    return PinPrototype(type, name)
+    ## TODO update to explain split_format!
+    return PinPrototype(type, name, split_format)
 
-def Exec(name: str = "exec-unnamed", split_format:str|None = None) -> str:
+def Exec(name: str = "exec-unnamed", split_format:str|None = None) -> PinPrototype:
     ## TODO update this to return a PinPrototype!
     """Shorthand for prototyping an ExecutionPin of a given name. For use in ``@crit_script_macro`` parameters."""
-    return name
+    ## TODO update to explain split_format!
+    return PinPrototype(None, name, split_format)
 
 

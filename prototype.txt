@@ -1,0 +1,400 @@
+`# GOALS
+
+Execution lines: happy path through a node should be straight through the top of the node.
+Keep technical burden to create nodes light
+
+# EVENT NAMES
+
+
+
+
+
+
+
+# EXECUTION AND DATA FLOW
+
+fork
+▶ in  out-0 ▶
+      out-1 ▶
+        &c. ▶
+
+junction
+▷ in-0  out ▷
+▷ in-1
+▷ &c.
+
+reroute-exec
+▷ in    out ▷
+
+reroute-value
+▶ in    out ▶
+
+run-back-exec
+◁ out    in ◁
+
+run-back-value
+◀ out    in ◀
+
+attempt
+▷ in           out ▷
+         try-first ▷
+
+remember-value
+▷ exec-in    exec-out ▷
+▶ value-in  value-out ▶
+
+
+
+# EVENTS
+
+event
+   start ▷
+ context ▶
+   value ▶
+
+
+
+# SPECIAL
+
+print
+▷ in    out ▷
+▶ message
+
+count-and-reset
+▷ in            out ▷
+▷ reset       count ▶
+▷ add-one
+
+accumulate-and-reset
+▷ in            out ▷
+▷ reset       count ▶
+▷ add-amount
+▶ amount
+
+append-and-reset
+▷ in            out ▷
+▷ reset        list ▶
+▷ append-item
+▶ item
+
+
+# BOOLEAN MATH
+
+or
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+and
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+not
+▶ in    out ▶
+
+none
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+only-one
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+odd
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+
+
+# COMPARISONS
+
+greater-than
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+less-than
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+greater-than-or-equals
+▶ in-0           out ▶
+▶ in-1
+▶ &c.
+
+less-than-or-equals
+▶ in-0        out ▶
+▶ in-1
+▶ &c.
+
+equals
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+not-equal-to
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+
+
+# LOOPS
+
+repeat-until-escape
+▷ in              out ▷      """this is run when the program hits the escape pin."""
+▷ escape    loop-body ▷      """this is run repeatedly until the program hits the escape pin."""
+
+repeat-over-list
+▷ in              out ▷      """this is run when the list is exhausted, or the program hits the escape pin."""
+▷ escape    loop-body ▷      """this is run repeatedly until the list is exhausted, or the program hits the escape pin."""
+▶ list          index ▶      """the number of times "during" has run so far, starting at 0."""
+                 item ▶      """an item in the given list."""
+
+
+
+# BRANCHES
+
+branch-by-validity
+▷ in       is-valid ▷
+▶ value        else ▷
+
+branch-by-condition
+▷ in        is-true ▷
+▶ condition    else ▷
+
+branch-by-index
+▷ in          out-0 ▷
+▶ index       out-1 ▷
+                &c. ▷
+
+branch-by-<          >
+▷ in         default ▷
+▶ in        option-0 ▷
+            option-1 ▷
+                 &c. ▷
+
+# MATH
+
+add
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+multiply
+▶ in-0  out ▶
+▶ in-1
+▶ &c.
+
+subtract
+▶ minuend       difference ▶
+▶ subtrahend
+
+divide
+▶ dividend        quotient ▶
+▶ divisor
+
+divide-as-integer
+▶ dividend        quotient ▶
+▶ divisor
+
+remainder
+▶ dividend       remainder ▶
+▶ divisor
+
+
+
+# LISTS
+
+sort-ascending
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, sorted from smallest to largest"""
+
+sort-descending
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, sorted from largest to smallest"""
+
+reverse
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, in reverse order"""
+
+contains-item
+▷ in             out ▷
+▶ list    has-value? ▶      """True if list contains the item, False if it does not."""
+▶ item
+
+find-item
+▷ in                out ▷
+▶ list            index ▶
+▶ item
+▶ list-is-sorted            """If the list is sorted, pass in True here so it can use binary search, a fast algorithm. Binary search does NOT work on unsorted lists, and may give invalid results even when the item exists."""
+
+read-first
+▷ in        out ▷
+▶ list     item ▶
+
+read-last
+▷ in        out ▷
+▶ list     item ▶
+
+read-at-index
+▷ in        out ▷
+▶ list     item ▶       """The item at the given index in the list. Is not valid if the index was out of range."""
+▶ index
+
+overwrite-first
+▷ in             out ▷
+▶ list      new-list ▶
+▶ new-item
+
+overwrite-last
+▷ in             out ▷
+▶ list      new-list ▶
+▶ new-item
+
+overwrite-at-index
+▷ in             out ▷
+▶ list      new-list ▶
+▶ new-item
+▶ index
+
+remove-first
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, with the value removed from it."""
+        removed-item ▶      """the value removed from the list."""
+
+remove-last
+▷ in             out ▷
+▶ list      new-list ▶
+        removed-item ▶
+
+remove-at-index
+▷ in                 out ▷
+▶ list          new-list ▶
+▶ index     removed-item ▶
+
+insert-as-first
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, with new-item added at the beginning."""
+▶ new-item
+
+insert-as-last
+▷ in             out ▷
+▶ list      new-list ▶      """the new list, with the new-item added at the end."""
+▶ new-item
+
+insert-before-index
+▷ in             out ▷
+▶ list      new-list ▶
+▶ new-item
+▶ index                     """if the index is the length of the list, it will add the new-value at the end."""
+
+combine
+▷ in             out ▷
+▶ list-0    new-list ▶      """a new list made up of list-0, list-1, &c. butted up end-to-end, such that it starts with list-0's elements, then list-1's elements, and proceeds likewise."""
+▶ list-1
+▶ &c.
+
+
+# STRINGS
+
+replace
+▶ list          out ▶
+▶ value-to-replace
+▶ replace-with
+
+concatenate
+▶ list-in   out ▶
+
+concatenate-affixed
+▶ prefix        out ▶
+▶ list-in
+▶ suffix
+
+concatenate-delimited
+▶ delimiter     out ▶
+▶ list-in
+
+concatenate-complex
+▶ delimiter     out ▶
+▶ prefix
+▶ list-in
+▶ suffix
+
+
+
+# RANDOMS
+
+roll-die
+▶ die-type      result ▶
+
+roll-dice
+▶ die-count     result ▶
+▶ die-type
+
+roll-percent
+     result ▶       """a random number between 0 and 1, including 0 and not including 1. That is, result ∈ [0, 1)"""
+
+roll-weighted-index
+▶ weights-list   index ▶
+
+make-die-algebra-segment
+▶ die-count     expression ▶
+▶ die-type
+
+roll-dice-algebra-expression
+▶ expression        result ▶
+
+## TODO implement __add__ and __sub__ for die algebra expressions!
+
+
+# CUSTOM-STRUCTS
+
+make-struct
+▶ value-0    struct-out ▶
+▶ value-1
+▶ &c.
+
+break-struct
+▶ struct-in     value-0 ▶
+                value-1 ▶
+                    &c. ▶
+
+
+
+# HEAD-AND-TAIL LOOPS
+
+repeat-loop-head
+▷ in    body ▷
+
+repeat-loop-tail
+▷ goto-body     out ▷
+▷ escape
+
+do-while-loop-head
+▷ in    body ▷
+
+do-while-loop-tail
+▷ goto-body     out ▷
+▶ condition
+
+for-loop-head
+▷ in    body ▷
+       index ▶
+
+for-loop-tail
+▷ goto-body     out ▷
+▷ escape
+
+
+
+# CUSTOM FUNCTION
+
+function
+▷ in   ***   out ▷
+▶ in   ***   out ▶`
