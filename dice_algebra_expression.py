@@ -1,5 +1,10 @@
 from random import randint
 
+### Processes die algebra expressions, including the following operators:
+### +    addition
+### -    subtraction/negation
+### !    explosion (for exploding dice)
+
 def roll_dice(count:int, die_type:int):
     accum:int = 0
     for i in range(count):
