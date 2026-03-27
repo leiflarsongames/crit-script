@@ -505,8 +505,13 @@ def run_graph(start_from: ExecutionPin | Node) -> None:
         else:
             in_pin = None
 
-def make_node(function:Callable):
+def make_node(function:Callable|str):
     """Creates a node from a function which has been submitted with a @crit_script or @crit_script_macro decorator."""
+    if isinstance(function, str):
+        if function in ALL_FUNCTIONS:
+            function = ALL_FUNCTIONS[function]
+        else:
+            raise KeyError(f"Cannot make_node of function named {function}!")
     rv = Node._make_head_node(function)
     # self.wake_up()    ## TODO uncomment!
     return rv
@@ -545,6 +550,13 @@ def make_mutable_iterable(obj:Any) -> list:
     elif not isinstance(obj, Iterable):
         return [obj,]   # single element list
     return list(obj)    # cast to list
+
+def delete_from_crit_script(name:Callable|str):
+    if isinstance(name, Callable):
+        identifier = make_crit_script_identifier(function)
+    else:
+        identifier = sanitize_identifier(custom_name)
+    del ALL_FUNCTIONS[identifier]
 
 def _add_to_crit_script(
         function,

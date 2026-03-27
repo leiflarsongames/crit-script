@@ -1,9 +1,29 @@
 ## TODO everything but components are sorted... optimizations of access, removal, and insertion may be available!
 
+from crit_script import make_crit_script_identifier, crit_script
+from dataclasses import dataclass
+
+_current_scene:Scene|None = None
+_component_traits:dict[str, ComponentTrait] = dict()
+
 class Scene:
+    """Singleton"""
     def __init__(self):
+        self._entities:list[Entity] = []
         self._entities = list()
         self._next_id = 0
+
+    @classmethod
+    def get(cls):
+        if _current_scene:
+            _current_scene = Scene()
+        else:
+            return _current_scene
+
+    # @classmethod
+    # def tear_down(cls):
+    #     self = cls.get()
+    #     for entity in self._entities:
 
     def spawn(self) -> Entity:
         """Creates a new entity, and adds it to the scene."""
@@ -16,7 +36,7 @@ class Scene:
         # New entities are inserted at the end of the list, and stay sorted by ID!
         self._next_id += 1
 
-    def get_entity_by_id(self, entity_id) -> Entity | None:
+    def get_entity_by_id(self, entity_id:int) -> Entity | None:
         for entity in self._entities:
             if entity.id == entity_id:
                 return entity
@@ -31,6 +51,12 @@ class Scene:
 
 
 
+
+# Note: Encourage the user to do as MUCH AS POSSIBLE with an entity through components!!!
+# A scene's job is to hold entities
+# An entity's job is to hold components
+# A component's job is to hold data and do behavior sparingly
+# A system's job is to give components behavior in the game loop
 class Entity:
     def __init__(self, scene_context:Scene):
         scene_context.issue_new_entity_id(self)     # assigns self._id
@@ -44,12 +70,14 @@ class Entity:
         succeeds = not self.has_specific_component(components)
         if succeeds:
             self._components[type(component)].append(component)
+            component._update_my_attach(self)
         return succeeds
 
     def try_detach(self, component) -> bool:
         succeeds = self.has_specific_component(component)
         if succeeds:
             self._components[type(component)].remove(component)
+            component._update_my_detach()
         return succeeds
 
     def attach(self, component) -> Entity:
@@ -90,17 +118,68 @@ class Entity:
     def get_all_component_types(self) -> list[type[Component]]:
         return self._conponents.keys()
 
+@dataclass
+class ComponentTrait:
+    """A template which specifies which properties are to be expected from a component.
+    Traits may be mixed together. Any properties that are present in two traits will be considered part of both
+    traits."""
+    def __init__(self, name:str, variables:dict[str, Any]):
+        self.name:str = name
+        self.variables:dict[str, Any] = variables       # identifier, default value
+
+    # def submit_component_trait(self):
+    #
+    #
+    # def submit_variable(self, key: str, starting_value: Any | None = None):
+    #     """Adds a variable as a valid option to this component, and submits it as a function if it does not already
+    #     exist."""
+    #     self.data[key] = starting_value
+    #     ## have this submit functions to CritScript manipulating this variable!
+    #
+    #
+    #
+    #     # TODO submit getter
+    #     @crit_script(
+    #         inputs=Pin("component", Component),
+    #         outputs=Pin("value"),
+    #         category=f"{self.name}",
+    #         custom_name=f"get-{key}",
+    #         ## TODO make a just-in-time node!
+    #     )
+    #     def get_property_from_trait(component:Component) -> Any:
+    #         return component.data[key]
+    #
+    #     # TODO submit setter
+    #     @crit_script(
+    #         inputs=(Pin("component", Component), ),
+    #         outputs=Pin("value"),
+    #         category=f"{self.name}",
+    #         custom_name=f"set-{key}",
+    #     )
+    #     def get_property_from_trait(component: Component, value:Any) -> Any:
+    #         return component.data[key]
+
 
 
 class Component:
-    def __init__(self, parent:Entity|None):
+    def __init__(self, traits:list[ComponentTrait]):
         self._parent:Entity|None = parent
-        self.search_tag:type[Component] = type(self)
+        self._traits:list[ComponentTrait] = list()
+        self.data:dict[str, Any] = dict()
         ## TODO does this select the most specific applicable type?
         ## TODO does this work robustly with entity searching? See all instances of "type()"
 
     def try_get_parent(self) -> Entity|None:
         return self._parent
+
+    def _update_my_attach(self, entity:Entity):
+        self._parent = entity
+        self.on_attach()
+
+    def _update_my_detach(self):
+        if self._parent is not None:
+            self._parent.on_detach()
+            self._parent = None
 
     def on_attach(self):
         pass
@@ -108,6 +187,23 @@ class Component:
     def on_detach(self):
         pass
 
+    def get(self, key:str) -> Any:
+        if key in self.data:
+            return self.data[key]
+        else:
+            raise KeyError(f"Component {self} has no variable named {key}!")
+
+    def set(self, key:str, value:Any) -> bool:
+        if key in self.data:
+            self.data[key] = value
+        else:
+            raise KeyError(f"Component {self} has no variable named {key}!")
+
+    def has_variable(self, key:str) -> bool:
+        return key in self.data
+
+    def variable_is_valid(self, key:str) -> bool:
+        return key in self.data and self.data[key] is not None
 
 
 class System:
