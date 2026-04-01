@@ -1,6 +1,6 @@
 """Implements functionality internal to CritScript.
 
-``@author``: Leif Games leiflarsongames@gmail.com"""
+``@author``: Contact at leiflarsongames@gmail.com"""
 
 from dataclasses import dataclass
 from enum import Enum
