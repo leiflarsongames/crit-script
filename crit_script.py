@@ -243,6 +243,7 @@ class NodePrototype:
     exec_inputs: list[str] | None = None
     exec_outputs: list[str] | None = None
     category: str | None = None     # used for searching
+    docs: str | None = None
 
 class Node:
     def __init__(self):
@@ -567,6 +568,7 @@ def _add_to_crit_script(
         exec_outputs: Iterable[str | PinPrototype] | None = None,
         category: str|None = None,      # Note: Category is NOT normalized to be a value.
         custom_name: str|None = None,
+        docs: str|None = None
     ):
     if isinstance(inputs, tuple):
         inputs = list(inputs)
@@ -581,9 +583,9 @@ def _add_to_crit_script(
             exec_inputs = list("exec-in")
         if exec_outputs is None:
             exec_outputs = list("exec-out")
-        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, category=category)
+        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, exec_inputs, exec_outputs, category=category, docs=docs)
     else:
-        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, category=category)
+        ALL_FUNCTIONS[identifier] = NodePrototype(function, node_type, inputs, outputs, category=category, docs=docs)
 
 ## CritScript Decorators
 
@@ -600,7 +602,8 @@ def crit_script(
         custom_name: str | None = None,        ## TODO allow custom names!!!!!
         # end of un-normalized user inputs
         just_in_time_node:bool = False,
-        category:str|None = None
+        category:str|None = None,
+        docs:str|None = None,
     ):
     """Function decorator for any CritScript function that isn't a macro.
     TODO document the return types and parameters here with examples!"""
@@ -624,7 +627,7 @@ def crit_script(
         wrapper.__name__ = function.__name__                        # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
         node_type = NodeType.JustInTime if just_in_time_node else NodeType.Standard
-        _add_to_crit_script(wrapper, inputs, outputs, node_type, category=category, custom_name=custom_name)    # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, node_type, category=category, custom_name=custom_name, docs=docs)    # submits this function to CritScript
         return wrapper
     return decorator
 
@@ -656,6 +659,7 @@ def crit_script_macro(
         custom_name:  str | None = None,
         # end of un-normalized user inputs
         category: str | None = None,
+        docs:str|None = None,
     ):
     """Function decorator for any CritScript function that will become a macro.
     TODO document the return types and parameters here with examples!"""
@@ -689,7 +693,7 @@ def crit_script_macro(
             return function(*sub_args, **sub_kwargs)
         wrapper.__name__ = function.__name__  # Ensures decorated functions keep their names.
         wrapper.__qualname__ = function.__qualname__
-        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, category=category, custom_name=custom_name) # submits this function to CritScript
+        _add_to_crit_script(wrapper, inputs, outputs, NodeType.Macro, exec_inputs, exec_outputs, category=category, custom_name=custom_name, docs=docs) # submits this function to CritScript
         return wrapper
     return decorator
 

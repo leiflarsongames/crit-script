@@ -28,7 +28,8 @@ def debug_print(ctx, *inputs: str):
 #     return Any
 
 @crit_script(
-    category="flow"
+    category="flow",
+    docs="Does nothing. Used for redirecting an execution link.",
 )
 def reroute_execution(ctx) -> None:
     """Does nothing. Used for redirecting an execution line."""
@@ -39,6 +40,7 @@ def reroute_execution(ctx) -> None:
     outputs=Pin('value-out'),
     just_in_time_node=True,
     category="flow",
+    docs="Returns `value-in`.",
 )
 def reroute_value(ctx, value_in) -> Any:
     """Does nothing. Used for redirecting a value line."""
@@ -49,6 +51,7 @@ def reroute_value(ctx, value_in) -> Any:
     outputs=Pin('values-out', split_format='value-out'),
     just_in_time_node=True,
     category="flow",
+    docs="Returns `value-in` as many times as the `values-out` pin was split."
 )
 def fork_value(ctx:NodeContext, value_in:Any) -> Any:
     """Returns shallow copies of the value-in to every value-out pin."""
@@ -63,6 +66,7 @@ def fork_value(ctx:NodeContext, value_in:Any) -> Any:
     exec_inputs=Exec('execs-in', split_format='exec-in'),
     exec_outputs=Exec('exec-out'),
     category="flow",
+    docs="Executes from `exec-out` no matter which `exec-in` pin was executed."
 )
 def junction(ctx:NodeContext): ## TODO check name used on paper prototype!!!
     pass
@@ -104,6 +108,7 @@ def make_keyword_parameters(ctx, keys:list[str], values:list[Any]) -> dict[str, 
                   Exec('a=b'),
                   Exec('a>b')),
     aliases=('switch-compare', 'compare'),
+    docs="Executes from either `a<b`, `a=b`, or the `a>b` pin, based on the comparison between `a` and `b`.",
 )
 def switch_by_comparison(ctx:NodeContext, a, b) -> None:
     if a < b:
@@ -153,7 +158,11 @@ def wake_up_count_and_reset(node:Node) -> int:
                  Exec('stop')),
     exec_outputs=(Exec('repeat-here'),
                   Exec('done')),
-    aliases='while-loop',)
+    aliases='while-loop',
+    docs="Runs `repeat-here` repeatedly until `stop` is called, then executes `done`.\n"
+         "Note: This function will run *forever* unless you eventually call `stop` from inside the loop!\n"
+         "\t(i.e., from the path coming after `repeat-here`).",
+)
 def loop(ctx:NodeContext) -> None:
     """Repeatedly executes at [repeat-here] until [stop] is called. Then the graph continues at [done].
 
@@ -178,15 +187,19 @@ def loop(ctx:NodeContext) -> None:
     exec_inputs=(Exec('exec-in-0'),
                  Exec('exec-in-1')),
     exec_outputs=Exec('exec-out'),
+    docs="Joins two execution inputs to a single execution output.",
 )
 def execution_joint(ctx:NodeContext) -> None:
     ctx.exec_out_index = 0
     return
 
-# @crit_script_macro(
-#     exec_inputs=(Exec('exec-in')))
-# def throw_exception(ctx:NodeContext) -> None:
-#     raise CritScriptUserException
+@crit_script_macro(
+    exec_inputs=(Exec('exec-in')),
+    inputs=(Pin('message', str)),
+    docs="Throws an exception in the internal Python backend.",
+)
+def throw_exception(ctx:NodeContext, message) -> None:
+    raise CritScriptUserException(message)
 
 # @crit_script_macro() # call for loops "repeat"
 #

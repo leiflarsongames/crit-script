@@ -22,10 +22,10 @@ def get_node_io(*args) -> str:
     except KeyError:
         return f"Cannot find node named \"{node_name}\"."
 
-    if node_prototype.function.__doc__:
-        print(node_prototype.function.__doc__)
+    if node_prototype.docs:
+        print(node_prototype.docs)
     else:
-        print("No accompanying docstring found.")
+        print("No accompanying node documentation found.")
 
     accumulator:str = node_name
     accumulator += (' ' * (DOCUMENTATION_TITLE_COLUMN_WIDTH-len(accumulator)) +
